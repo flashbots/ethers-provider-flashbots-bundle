@@ -4,17 +4,17 @@ import { BaseProvider } from "@ethersproject/providers";
 import { ConnectionInfo } from "@ethersproject/web";
 import { Networkish } from "@ethersproject/networks";
 
-export enum BundleResolution {
+export enum FlashbotsBundleResolution {
   BundleIncluded,
   BlockPassedWithoutInclusion,
   AccountNonceTooHigh,
 }
 
-interface MevBundleRawTransaction {
+export interface FlashbotsBundleRawTransaction {
   signedTransaction: string
 }
 
-interface MevBundleTransaction {
+export interface FlashbotsBundleTransaction {
   transaction: TransactionRequest
   signer: Signer
 }
@@ -26,14 +26,21 @@ interface TransactionAccountNonce {
   nonce: number
 }
 
-interface MevTransactionResponse {
+interface FlashbotsTransactionResponse {
   bundleTransactions: Array<TransactionAccountNonce>
-  wait: () => Promise<BundleResolution>
+  wait: () => Promise<FlashbotsBundleResolution>
   simulate: () => void
-  receipts: () => Promise<Array<Array<TransactionReceipt>>>
+  receipts: () => Promise<Array<TransactionReceipt>>
 }
 
-export class MevBundleProvider extends providers.JsonRpcProvider {
+
+interface SimulationResponse { // eslint-disable-line @typescript-eslint/no-empty-interface
+  // TODO
+}
+
+const TIMEOUT_MS = 5 * 60 * 1000;
+
+export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   private genericProvider: BaseProvider;
 
   constructor(genericProvider: BaseProvider, url?: ConnectionInfo | string, network?: Networkish) {
@@ -41,9 +48,8 @@ export class MevBundleProvider extends providers.JsonRpcProvider {
     this.genericProvider = genericProvider;
   }
 
-  async sendRawBundle(signedBundledTransactions: Array<string>, targetBlockNumber: number): Promise<MevTransactionResponse> {
-    const response = await this.send("eth_sendBundle", [signedBundledTransactions, `0x${targetBlockNumber.toString(16)}`]);
-    console.log(response)
+  async sendRawBundle(signedBundledTransactions: Array<string>, targetBlockNumber: number): Promise<FlashbotsTransactionResponse> {
+    await this.send("eth_sendBundle", [signedBundledTransactions, `0x${targetBlockNumber.toString(16)}`]);
     const bundleTransactions = signedBundledTransactions.map(signedTransaction => {
       const transactionDetails = ethers.utils.parseTransaction(signedTransaction)
       return {
@@ -53,34 +59,42 @@ export class MevBundleProvider extends providers.JsonRpcProvider {
         nonce: transactionDetails.nonce
       }
     })
+    console.log(bundleTransactions)
     return {
       bundleTransactions,
-      wait: () => this.wait(bundleTransactions, targetBlockNumber,  5 * 60 * 1000),
+      wait: () => this.wait(bundleTransactions, targetBlockNumber,  TIMEOUT_MS),
       simulate: () => this.simulate(bundleTransactions, targetBlockNumber),
-      receipts: () => this.fetchReceipts()
+      receipts: () => this.fetchReceipts(bundleTransactions)
     }
   }
 
-  async sendBundle(bundledTransactions: Array<MevBundleTransaction | MevBundleRawTransaction>, targetBlockNumber: number): Promise<MevTransactionResponse> {
+  async sendBundle(bundledTransactions: Array<FlashbotsBundleTransaction | FlashbotsBundleRawTransaction>, targetBlockNumber: number): Promise<FlashbotsTransactionResponse> {
     const nonces: { [address: string]: BigNumber } = {}
-    const signedTransactions = await Promise.all(bundledTransactions.map(
-      async (tx) => {
-        if ("signedTransaction" in tx) return tx.signedTransaction
-        const transaction = {...tx.transaction}
-        let address = await tx.signer.getAddress()
-        if (typeof transaction.nonce === 'string') throw new Error("Bad nonce")
-        let nonce = transaction.nonce !== undefined ? BigNumber.from(transaction.nonce) : nonces[address] || BigNumber.from(await this.genericProvider.getTransactionCount(address, "latest"))
-        nonces[address] = nonce.add(1)
-        if (transaction.nonce === undefined) transaction.nonce = nonce
-        if (transaction.gasPrice === undefined) transaction.gasPrice = BigNumber.from(0)
-        if (transaction.gasLimit === undefined) transaction.gasLimit = await tx.signer.estimateGas(transaction) // TODO: Add target block number and timestamp when supported by geth
-        return await tx.signer.signTransaction(transaction)
-      }))
+    const signedTransactions = new Array<string>()
+    for (const tx of bundledTransactions) {
+      if ("signedTransaction" in tx) {
+        // in case someone is mixing pre-signed and signing transactions, decode to add to nonce object
+        const transactionDetails = ethers.utils.parseTransaction(tx.signedTransaction)
+        if (transactionDetails.from === undefined) throw new Error("Could not decode signed transaction")
+        nonces[transactionDetails.from] = BigNumber.from(transactionDetails.nonce + 1)
+        signedTransactions.push(tx.signedTransaction)
+        continue
+      }
+      const transaction = {...tx.transaction}
+      const address = await tx.signer.getAddress()
+      if (typeof transaction.nonce === 'string') throw new Error("Bad nonce")
+      const nonce = transaction.nonce !== undefined ? BigNumber.from(transaction.nonce) : nonces[address] || BigNumber.from(await this.genericProvider.getTransactionCount(address, "latest"))
+      nonces[address] = nonce.add(1)
+      if (transaction.nonce === undefined) transaction.nonce = nonce
+      if (transaction.gasPrice === undefined) transaction.gasPrice = BigNumber.from(0)
+      if (transaction.gasLimit === undefined) transaction.gasLimit = await tx.signer.estimateGas(transaction) // TODO: Add target block number and timestamp when supported by geth
+      signedTransactions.push(await tx.signer.signTransaction(transaction))
+    }
     return this.sendRawBundle(signedTransactions, targetBlockNumber)
   }
 
   private wait(transactionAccountNonces: Array<TransactionAccountNonce>, targetBlockNumber: number, timeout: number) {
-    return new Promise<BundleResolution>((resolve, reject) => {
+    return new Promise<FlashbotsBundleResolution>((resolve, reject) => {
       let timer: NodeJS.Timer | null = null;
       let done = false;
 
@@ -91,10 +105,8 @@ export class MevBundleProvider extends providers.JsonRpcProvider {
         acc[accountNonce.account] = accountNonce.nonce
         return acc
       }, {} as { [account: string]: number })
-      console.log({minimumNonceByAccount})
-
       const handler = async (blockNumber: number) => {
-        console.log(`blockNumber: ${blockNumber}`)
+        console.log(`blockNumber: ${blockNumber} / ${targetBlockNumber}`)
 
         if (blockNumber < targetBlockNumber) {
           const noncesValid = await Promise.all(
@@ -106,14 +118,14 @@ export class MevBundleProvider extends providers.JsonRpcProvider {
           const allNoncesValid = noncesValid.every(Boolean);
           if (allNoncesValid) return;
           // target block not yet reached, but nonce has become invalid
-          resolve(BundleResolution.AccountNonceTooHigh)
+          resolve(FlashbotsBundleResolution.AccountNonceTooHigh)
         } else {
           const block = await this.genericProvider.getBlock(targetBlockNumber);
           // check bundle against block:
           const bundleIncluded = transactionAccountNonces.every((transaction, i) =>
             block.transactions[block.transactions.length - 1 - i] === transaction.hash
           )
-          resolve(bundleIncluded ? BundleResolution.BundleIncluded : BundleResolution.BlockPassedWithoutInclusion);
+          resolve(bundleIncluded ? FlashbotsBundleResolution.BundleIncluded : FlashbotsBundleResolution.BlockPassedWithoutInclusion);
         }
 
         if (timer) { clearTimeout(timer);}
@@ -142,14 +154,13 @@ export class MevBundleProvider extends providers.JsonRpcProvider {
     });
   }
 
-  simulate(bundledTransactions: Array<MevBundleTransaction | MevBundleRawTransaction>, targetBlockNumber: number) {
+  simulate(bundledTransactions: Array<FlashbotsBundleTransaction | FlashbotsBundleRawTransaction>, targetBlockNumber: number): Promise<Array<SimulationResponse>> {
     // TODO simulate
-    console.log("Running simulation")
+    console.error("Running simulation on " + bundledTransactions.length + " transactions on blockNumber " + targetBlockNumber)
+    throw new Error("Simulation not yet supported")
   }
 
-  private async fetchReceipts() {
-    // TODO fetchReceipts
-    return [];
+  private async fetchReceipts(bundledTransactions: Array<TransactionAccountNonce>): Promise<Array<TransactionReceipt>> {
+    return Promise.all(bundledTransactions.map(bundledTransaction => this.genericProvider.getTransactionReceipt(bundledTransaction.hash)));
   }
-
 }

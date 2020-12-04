@@ -1,17 +1,22 @@
 {
-  "name": "ethers-provider-flashbots-bundle",
-  "version": "1.0.0",
+  "name": "@flashbots/ethers-provider-bundle",
+  "version": "0.0.1",
   "description": "",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "scripts": {
-    "start": "npx ts-node --project tsconfig.json src/index.ts",
+    "demo": "npx ts-node --project tsconfig.json src/demo.ts",
+    "build": "npx tsc",
+    "prepare": "npm run build",
     "lint": "npx eslint src"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "@types/node": "^14.14.10",
+    "@typescript-eslint/eslint-plugin": "^4.9.1",
+    "@typescript-eslint/parser": "^4.9.1",
+    "eslint": "^7.15.0",
     "ethers": "^5.0.23"
   },
   "peerDependencies": {
