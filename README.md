@@ -13,10 +13,10 @@ You can pass in a generic ethers.js provider to the flashbots provider in the co
 const NETWORK_INFO = {chainId: 1, ensAddress: '', name: 'mainnet'}
 
 // Standard json rpc provider directly from ethers.js 
-const provider = new providers.JsonRpcProvider({url: ETHEREUM_URL}, NETWORK_INFO)
+const provider = new providers.JsonRpcProvider({url: ETHEREUM_RPC_URL}, NETWORK_INFO)
 
 // flashbots provider requires passing in a standard provider
-const flashbotsProvider = new FlashbotsBundleProvider(provider, {url: FLASHBOTS_RELAY_URL}, NETWORK_INFO)
+const flashbotsProvider = new FlashbotsBundleProvider(provider, {url: FLASHBOTS_RPC_URL}, NETWORK_INFO)
 ``` 
 
 The flashbotsProvider provides the sendBundle function:
@@ -31,18 +31,24 @@ Example
 ```
 // Using the map below ships two different bundles, targeting the next two blocks
 const blockNumber = await provider.getBlockNumber()
+const minTimestamp = (await provider.getBlock(blockNumber)).timestamp
+const maxTimestamp = minTimestamp + 120
 const bundlePromises = _.map([blockNumber + 1, blockNumber + 2], targetBlockNumber =>
   this.flashbotsProvider.sendBundle(
     [
       {
-        signedTransaction: SIGNED_ORACLE_UPDATE_FROM_PENDING_POOL
+        signedTransaction: SIGNED_ORACLE_UPDATE_FROM_PENDING_POOL // serialized signed transaction hex
       },
       {
-        signer: wallet,
-        transaction: transaction
+        signer: wallet, // ethers signer
+        transaction: transaction // ethers populated transaction object
       }
     ],
-    targetBlockNumber
+    targetBlockNumber, // block number at which this bundle is valid
+    {
+      minTimestamp, // optional minimum timestamp at which this bundle is valid (inclusive)
+      maxTimestamp // optional maximum timestamp at which this bundle is valid (inclusive)
+    }
   )
 )
 ```
