@@ -54,14 +54,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   }
 
   async sendRawBundle(signedBundledTransactions: Array<string>, targetBlockNumber: number, opts?: FlashbotsOptions): Promise<FlashbotsTransactionResponse> {
-    const params = [`0x${targetBlockNumber.toString(16)}`] as Array<string | number>
-    if (opts?.minTimestamp) {
-      params.push(opts.minTimestamp)
-    }
-    if (opts?.maxTimestamp) {
-      params.push(opts.maxTimestamp)
-    }
-    await this.send("eth_sendBundle", [signedBundledTransactions, params]);
+    await this.send("eth_sendBundle", [signedBundledTransactions, [`0x${targetBlockNumber.toString(16)}`, opts?.minTimestamp || 0, opts?.maxTimestamp || 0]]);
     const bundleTransactions = signedBundledTransactions.map(signedTransaction => {
       const transactionDetails = ethers.utils.parseTransaction(signedTransaction)
       return {
