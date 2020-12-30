@@ -20,8 +20,8 @@ export interface FlashbotsBundleTransaction {
 }
 
 export interface FlashbotsOptions {
-  minTimestamp: number,
-  maxTimestamp: number
+  minTimestamp?: number,
+  maxTimestamp?: number
 }
 
 interface TransactionAccountNonce {
