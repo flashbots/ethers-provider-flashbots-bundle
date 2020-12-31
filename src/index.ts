@@ -19,6 +19,11 @@ export interface FlashbotsBundleTransaction {
   signer: Signer
 }
 
+export interface FlashbotsOptions {
+  minTimestamp?: number,
+  maxTimestamp?: number
+}
+
 interface TransactionAccountNonce {
   hash: string;
   signedTransaction: string;
@@ -48,8 +53,8 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     this.genericProvider = genericProvider;
   }
 
-  async sendRawBundle(signedBundledTransactions: Array<string>, targetBlockNumber: number): Promise<FlashbotsTransactionResponse> {
-    await this.send("eth_sendBundle", [signedBundledTransactions, `0x${targetBlockNumber.toString(16)}`]);
+  async sendRawBundle(signedBundledTransactions: Array<string>, targetBlockNumber: number, opts?: FlashbotsOptions): Promise<FlashbotsTransactionResponse> {
+    await this.send("eth_sendBundle", [signedBundledTransactions, [`0x${targetBlockNumber.toString(16)}`, opts?.minTimestamp || 0, opts?.maxTimestamp || 0]]);
     const bundleTransactions = signedBundledTransactions.map(signedTransaction => {
       const transactionDetails = ethers.utils.parseTransaction(signedTransaction)
       return {
@@ -68,7 +73,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     }
   }
 
-  async sendBundle(bundledTransactions: Array<FlashbotsBundleTransaction | FlashbotsBundleRawTransaction>, targetBlockNumber: number): Promise<FlashbotsTransactionResponse> {
+  async sendBundle(bundledTransactions: Array<FlashbotsBundleTransaction | FlashbotsBundleRawTransaction>, targetBlockNumber: number, opts?: FlashbotsOptions): Promise<FlashbotsTransactionResponse> {
     const nonces: { [address: string]: BigNumber } = {}
     const signedTransactions = new Array<string>()
     for (const tx of bundledTransactions) {
@@ -90,7 +95,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       if (transaction.gasLimit === undefined) transaction.gasLimit = await tx.signer.estimateGas(transaction) // TODO: Add target block number and timestamp when supported by geth
       signedTransactions.push(await tx.signer.signTransaction(transaction))
     }
-    return this.sendRawBundle(signedTransactions, targetBlockNumber)
+    return this.sendRawBundle(signedTransactions, targetBlockNumber, opts)
   }
 
   private wait(transactionAccountNonces: Array<TransactionAccountNonce>, targetBlockNumber: number, timeout: number) {

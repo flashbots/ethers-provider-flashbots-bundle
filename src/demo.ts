@@ -2,19 +2,21 @@ import { providers, Wallet } from "ethers"
 import { ConnectionInfo } from "ethers/lib/utils"
 import { FlashbotsBundleProvider } from "./index";
 
-const ETHEREUM_URL = "http://127.0.0.1:8545"
-const FLASHBOTS_RELAY_URL = "http://127.0.0.1:8545" // TODO: default relay
+const ETHEREUM_RPC_URL = process.env.ETHEREUM_RPC_URL || "http://127.0.0.1:8545"
+const FLASHBOTS_RPC_URL = process.env.FLASHBOTS_RPC_URL || "http://127.0.0.1:8545" // TODO: default relay
 
-const connection: ConnectionInfo = {url: ETHEREUM_URL}
+const connection: ConnectionInfo = {url: ETHEREUM_RPC_URL}
 const NETWORK_INFO = {chainId: 1, ensAddress: '', name: 'mainnet'}
 const provider = new providers.JsonRpcProvider(connection, NETWORK_INFO)
 
-const flashbotsConnection: ConnectionInfo = {url: FLASHBOTS_RELAY_URL}
+const flashbotsConnection: ConnectionInfo = {url: FLASHBOTS_RPC_URL}
 const flashbotsProvider = new FlashbotsBundleProvider(provider, flashbotsConnection, NETWORK_INFO)
 
 const wallet = Wallet.createRandom().connect(provider)
 
 provider.getBlockNumber().then(async (blockNumber) => {
+  const minTimestamp = (await provider.getBlock(blockNumber)).timestamp
+  const maxTimestamp = minTimestamp + 120
   const f = await flashbotsProvider.sendBundle([
       {
         signer: wallet,
@@ -34,7 +36,11 @@ provider.getBlockNumber().then(async (blockNumber) => {
         }
       },
     ],
-    blockNumber + 3
+    blockNumber + 3,
+    {
+      minTimestamp,
+      maxTimestamp
+    }
   )
 
   console.log(await f.wait())
