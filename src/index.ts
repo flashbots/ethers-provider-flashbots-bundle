@@ -62,7 +62,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     }
     if (connectionInfo.headers === undefined) connectionInfo.headers = {}
     connectionInfo.headers.Authorization = `${flashbotsKeyId}:${flashbotsSecret}`
-    let networkish: Networkish = {
+    const networkish: Networkish = {
       chainId: 0,
       name: ""
     }
