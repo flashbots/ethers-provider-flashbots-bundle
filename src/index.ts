@@ -38,7 +38,6 @@ interface FlashbotsTransactionResponse {
   receipts: () => Promise<Array<TransactionReceipt>>
 }
 
-
 interface SimulationResponse { // eslint-disable-line @typescript-eslint/no-empty-interface
   // TODO
 }
@@ -48,9 +47,21 @@ const TIMEOUT_MS = 5 * 60 * 1000;
 export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   private genericProvider: BaseProvider;
 
-  constructor(genericProvider: BaseProvider, url?: ConnectionInfo | string, network?: Networkish) {
-    super(url, network);
+  constructor(genericProvider: BaseProvider, connectionInfoOrUrl: ConnectionInfo | string, network?: Networkish) {
+    super(connectionInfoOrUrl, network);
+    console.log(connectionInfoOrUrl)
     this.genericProvider = genericProvider;
+  }
+
+  static create(genericProvider: BaseProvider, connectionInfoOrUrl: ConnectionInfo | string, username: string, apiKey: string, network?: Networkish): FlashbotsBundleProvider {
+    const connectionInfo: ConnectionInfo = typeof connectionInfoOrUrl === 'string' ? {
+      url: connectionInfoOrUrl
+    } : {
+      ...connectionInfoOrUrl
+    }
+    if (connectionInfo.headers === undefined) connectionInfo.headers = {}
+    connectionInfo.headers.Authorization = `${username}.${apiKey}`
+    return new FlashbotsBundleProvider(genericProvider, connectionInfo, network)
   }
 
   async sendRawBundle(signedBundledTransactions: Array<string>, targetBlockNumber: number, opts?: FlashbotsOptions): Promise<FlashbotsTransactionResponse> {

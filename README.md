@@ -71,3 +71,7 @@ A high-level object which contains metadata available at transaction submission 
 * receipts() - Returns promise of an array of transaction receipts corresponding to the transaction hashes that were relayed as part of the bundle. Will not wait for block to be mined; could return incomplete information
 * wait() - Returns a promise which will wait for target block number to be reched _OR_ one of the transactions to become invalid due to nonce-issues (including, but not limited to, one of the transactions from you bundle being included too early). Returns the wait resolution as a status enum
 * simulate() - Returns a promise of the transaction simulation, once the proper block height has been reached. Use this function to troubleshoot failing bundles and verify miner profitability
+
+How to run demo.ts
+-------------------
+Included is a simple demo of how to construct the FlashbotsProvider with api key authentication and submit a [non-functional] bundle. This will not yield any mev, but could serve as a sample initialization to help integrate into your own functional searcher.
