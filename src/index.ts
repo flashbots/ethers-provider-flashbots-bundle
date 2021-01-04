@@ -49,7 +49,7 @@ const TIMEOUT_MS = 5 * 60 * 1000;
 export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   private genericProvider: BaseProvider;
 
-  constructor(genericProvider: BaseProvider, connectionInfoOrUrl: ConnectionInfo | string, network: Networkish) {
+  constructor(genericProvider: BaseProvider, connectionInfoOrUrl: ConnectionInfo, network: Networkish) {
     super(connectionInfoOrUrl, network);
     this.genericProvider = genericProvider;
   }
