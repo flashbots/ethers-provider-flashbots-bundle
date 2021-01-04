@@ -1,9 +1,9 @@
 import { providers, Wallet } from "ethers"
 import { ConnectionInfo } from "ethers/lib/utils"
-import { FlashbotsBundleProvider } from "./index";
+import { DEFAULT_FLASHBOTS_RELAY, FlashbotsBundleProvider } from "./index";
 
 const ETHEREUM_RPC_URL = process.env.ETHEREUM_RPC_URL || "http://127.0.0.1:8545"
-const FLASHBOTS_RPC_URL = process.env.FLASHBOTS_RPC_URL || "https://relay.flashbots.net"
+const FLASHBOTS_RPC_URL = process.env.FLASHBOTS_RPC_URL || DEFAULT_FLASHBOTS_RELAY
 const FLASHBOTS_KEY_ID = process.env.FLASHBOTS_KEY_ID || '';
 const FLASHBOTS_SECRET = process.env.FLASHBOTS_SECRET || '';
 
@@ -13,16 +13,11 @@ const provider = new providers.JsonRpcProvider(connection, NETWORK_INFO)
 
 const flashbotsConnection: ConnectionInfo = {url: FLASHBOTS_RPC_URL}
 
-const flashbotsProvider = FlashbotsBundleProvider.create(
-  provider,
-  flashbotsConnection,
-  FLASHBOTS_KEY_ID,
-  FLASHBOTS_SECRET,
-  NETWORK_INFO)
-
-const wallet = Wallet.createRandom().connect(provider)
-
 provider.getBlockNumber().then(async (blockNumber) => {
+  const flashbotsProvider = await FlashbotsBundleProvider.create(provider, FLASHBOTS_KEY_ID, FLASHBOTS_SECRET, flashbotsConnection, NETWORK_INFO)
+
+  const wallet = Wallet.createRandom().connect(provider)
+
   const minTimestamp = (await provider.getBlock(blockNumber)).timestamp
   const maxTimestamp = minTimestamp + 120
   const f = await flashbotsProvider.sendBundle([

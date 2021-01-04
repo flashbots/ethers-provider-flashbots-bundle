@@ -4,6 +4,8 @@ import { BaseProvider } from "@ethersproject/providers";
 import { ConnectionInfo } from "@ethersproject/web";
 import { Networkish } from "@ethersproject/networks";
 
+export const DEFAULT_FLASHBOTS_RELAY = 'https://relay.flashbots.net'
+
 export enum FlashbotsBundleResolution {
   BundleIncluded,
   BlockPassedWithoutInclusion,
@@ -47,20 +49,37 @@ const TIMEOUT_MS = 5 * 60 * 1000;
 export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   private genericProvider: BaseProvider;
 
-  constructor(genericProvider: BaseProvider, connectionInfoOrUrl: ConnectionInfo | string, network?: Networkish) {
+  constructor(genericProvider: BaseProvider, connectionInfoOrUrl: ConnectionInfo | string, network: Networkish) {
     super(connectionInfoOrUrl, network);
     this.genericProvider = genericProvider;
   }
 
-  static create(genericProvider: BaseProvider, connectionInfoOrUrl: ConnectionInfo | string, username: string, apiKey: string, network?: Networkish): FlashbotsBundleProvider {
-    const connectionInfo: ConnectionInfo = typeof connectionInfoOrUrl === 'string' ? {
-      url: connectionInfoOrUrl
+  static async create(genericProvider: BaseProvider, flashbotsKeyId: string, flashbotsSecret: string, connectionInfoOrUrl?: ConnectionInfo | string, network?: Networkish): Promise<FlashbotsBundleProvider> {
+    const connectionInfo: ConnectionInfo = typeof connectionInfoOrUrl === 'string' || typeof connectionInfoOrUrl === 'undefined' ? {
+      url: connectionInfoOrUrl || DEFAULT_FLASHBOTS_RELAY
     } : {
       ...connectionInfoOrUrl
     }
     if (connectionInfo.headers === undefined) connectionInfo.headers = {}
-    connectionInfo.headers.Authorization = `${username}.${apiKey}`
-    return new FlashbotsBundleProvider(genericProvider, connectionInfo, network)
+    connectionInfo.headers.Authorization = `${flashbotsKeyId}.${flashbotsSecret}`
+    let networkish: Networkish = {
+      chainId: 0,
+      name: ""
+    }
+    if (typeof network === "string") {
+      networkish.name = network
+    } else if (typeof network === "number") {
+      networkish.chainId = network
+    } else if (typeof network === "object") {
+      networkish.name = network.name
+      networkish.chainId = network.chainId
+    }
+
+    if (networkish.chainId === 0) {
+      networkish.chainId = (await genericProvider.getNetwork()).chainId
+    }
+
+    return new FlashbotsBundleProvider(genericProvider, connectionInfo, networkish)
   }
 
   async sendRawBundle(signedBundledTransactions: Array<string>, targetBlockNumber: number, opts?: FlashbotsOptions): Promise<FlashbotsTransactionResponse> {
