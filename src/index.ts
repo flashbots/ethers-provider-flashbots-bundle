@@ -49,7 +49,6 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
 
   constructor(genericProvider: BaseProvider, connectionInfoOrUrl: ConnectionInfo | string, network?: Networkish) {
     super(connectionInfoOrUrl, network);
-    console.log(connectionInfoOrUrl)
     this.genericProvider = genericProvider;
   }
 
