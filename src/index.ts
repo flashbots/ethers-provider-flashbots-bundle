@@ -33,7 +33,7 @@ interface TransactionAccountNonce {
   nonce: number
 }
 
-interface FlashbotsTransactionResponse {
+export interface FlashbotsTransactionResponse {
   bundleTransactions: Array<TransactionAccountNonce>
   wait: () => Promise<FlashbotsBundleResolution>
   simulate: () => void
