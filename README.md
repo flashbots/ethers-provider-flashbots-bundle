@@ -16,7 +16,7 @@ const NETWORK_INFO = {chainId: 1, ensAddress: '', name: 'mainnet'}
 const provider = new providers.JsonRpcProvider({url: ETHEREUM_RPC_URL}, NETWORK_INFO)
 
 // flashbots provider requires passing in a standard provider
-const flashbotsProvider = new FlashbotsBundleProvider(provider, flashbotsApiKey, flashbotsSecret)
+const flashbotsProvider = await FlashbotsBundleProvider.create(provider, flashbotsApiKey, flashbotsSecret)
 ``` 
 
 The flashbotsProvider provides the sendBundle function:
