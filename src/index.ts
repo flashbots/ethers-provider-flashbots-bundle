@@ -93,7 +93,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
         nonce: transactionDetails.nonce
       }
     })
-    console.log(bundleTransactions)
+
     return {
       bundleTransactions,
       wait: () => this.wait(bundleTransactions, targetBlockNumber,  TIMEOUT_MS),
@@ -140,7 +140,6 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
         return acc
       }, {} as { [account: string]: number })
       const handler = async (blockNumber: number) => {
-        console.log(`blockNumber: ${blockNumber} / ${targetBlockNumber}`)
 
         if (blockNumber < targetBlockNumber) {
           const noncesValid = await Promise.all(
