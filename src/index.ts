@@ -54,6 +54,11 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     this.genericProvider = genericProvider;
   }
 
+  static async throttleCallback(): Promise<boolean> {
+    console.warn("Rate limited");
+    return false
+  }
+
   static async create(genericProvider: BaseProvider, flashbotsKeyId: string, flashbotsSecret: string, connectionInfoOrUrl?: ConnectionInfo | string, network?: Networkish): Promise<FlashbotsBundleProvider> {
     const connectionInfo: ConnectionInfo = typeof connectionInfoOrUrl === 'string' || typeof connectionInfoOrUrl === 'undefined' ? {
       url: connectionInfoOrUrl || DEFAULT_FLASHBOTS_RELAY
@@ -62,6 +67,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     }
     if (connectionInfo.headers === undefined) connectionInfo.headers = {}
     connectionInfo.headers.Authorization = `${flashbotsKeyId}:${flashbotsSecret}`
+    connectionInfo.throttleCallback = FlashbotsBundleProvider.throttleCallback
     const networkish: Networkish = {
       chainId: 0,
       name: ""
