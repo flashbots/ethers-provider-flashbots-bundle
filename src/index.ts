@@ -3,6 +3,7 @@ import { TransactionRequest, TransactionReceipt } from "@ethersproject/abstract-
 import { BaseProvider } from "@ethersproject/providers";
 import { ConnectionInfo } from "@ethersproject/web";
 import { Networkish } from "@ethersproject/networks";
+import { BlockTag } from "@ethersproject/abstract-provider";
 
 export const DEFAULT_FLASHBOTS_RELAY = 'https://relay.flashbots.net'
 
@@ -40,11 +41,22 @@ interface FlashbotsTransactionResponse {
   receipts: () => Promise<Array<TransactionReceipt>>
 }
 
+interface TransactionSimulation {
+  gasUsed: number;
+  txHash: string;
+  value: string;
+}
+
 interface SimulationResponse { // eslint-disable-line @typescript-eslint/no-empty-interface
-  // TODO
+  bundleHash: string;
+  coinbaseDiff: BigNumber;
+  results: Array<TransactionSimulation>;
+  totalGasUsed: number;
 }
 
 const TIMEOUT_MS = 5 * 60 * 1000;
+
+const SECONDS_PER_BLOCK = 15;
 
 export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   private genericProvider: BaseProvider;
@@ -103,12 +115,17 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     return {
       bundleTransactions,
       wait: () => this.wait(bundleTransactions, targetBlockNumber,  TIMEOUT_MS),
-      simulate: () => this.simulate(bundleTransactions, targetBlockNumber),
+      simulate: () => this.simulate(bundleTransactions.map(tx => tx.signedTransaction), targetBlockNumber),
       receipts: () => this.fetchReceipts(bundleTransactions)
     }
   }
 
   async sendBundle(bundledTransactions: Array<FlashbotsBundleTransaction | FlashbotsBundleRawTransaction>, targetBlockNumber: number, opts?: FlashbotsOptions): Promise<FlashbotsTransactionResponse> {
+    const signedTransactions = await this.signBundle(bundledTransactions);
+    return this.sendRawBundle(signedTransactions, targetBlockNumber, opts)
+  }
+
+  public async signBundle(bundledTransactions: Array<FlashbotsBundleTransaction | FlashbotsBundleRawTransaction>): Promise<Array<string>> {
     const nonces: { [address: string]: BigNumber } = {}
     const signedTransactions = new Array<string>()
     for (const tx of bundledTransactions) {
@@ -130,7 +147,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       if (transaction.gasLimit === undefined) transaction.gasLimit = await tx.signer.estimateGas(transaction) // TODO: Add target block number and timestamp when supported by geth
       signedTransactions.push(await tx.signer.signTransaction(transaction))
     }
-    return this.sendRawBundle(signedTransactions, targetBlockNumber, opts)
+    return signedTransactions;
   }
 
   private wait(transactionAccountNonces: Array<TransactionAccountNonce>, targetBlockNumber: number, timeout: number) {
@@ -146,7 +163,6 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
         return acc
       }, {} as { [account: string]: number })
       const handler = async (blockNumber: number) => {
-
         if (blockNumber < targetBlockNumber) {
           const noncesValid = await Promise.all(
             Object.entries(minimumNonceByAccount).map(async ([account, nonce]) => {
@@ -193,10 +209,29 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     });
   }
 
-  simulate(bundledTransactions: Array<FlashbotsBundleTransaction | FlashbotsBundleRawTransaction>, targetBlockNumber: number): Promise<Array<SimulationResponse>> {
-    // TODO simulate
-    console.error("Running simulation on " + bundledTransactions.length + " transactions on blockNumber " + targetBlockNumber)
-    throw new Error("Simulation not yet supported")
+  async simulate(signedBundledTransactions: Array<string>, blockTag: BlockTag, stateBlockTag?: BlockTag, blockTimestamp?: number): Promise<SimulationResponse> {
+    const blockTagDetails = await this.genericProvider.getBlock(blockTag)
+    const blockDetails = blockTagDetails !== null ? blockTagDetails : await this.genericProvider.getBlock("latest")
+
+    const evmBlockNumber = `0x${blockDetails.number.toString(16)}`
+    const evmBlockStateNumber = stateBlockTag !== undefined ? stateBlockTag : `0x${(blockDetails.number - 1).toString(16)}`
+    const evmTimestamp = blockTimestamp !== undefined ? blockTimestamp :
+      blockTagDetails !== null ? blockTagDetails.timestamp :
+      await this.extrapolateTimestamp(blockTag, blockDetails);
+    const callResult = await this.send("eth_callBundle", [signedBundledTransactions, evmBlockNumber, evmBlockStateNumber, evmTimestamp]);
+    return {
+      bundleHash: callResult.bundleHash,
+      coinbaseDiff: BigNumber.from(callResult.coinbaseDiff),
+      results: callResult.results,
+      totalGasUsed: callResult.results.reduce((a: number, b: TransactionSimulation) => a + b.gasUsed, 0)
+    }
+  }
+
+  private async extrapolateTimestamp(blockTag: BlockTag, latestBlockDetails: providers.Block) {
+    if (typeof blockTag !== "number") throw new Error("blockTag must be number to extrapolate")
+    const blockDelta = blockTag - latestBlockDetails.number
+    if (blockDelta < 0) throw new Error("block extrapolation negative")
+    return latestBlockDetails.timestamp + (blockDelta * SECONDS_PER_BLOCK);
   }
 
   private async fetchReceipts(bundledTransactions: Array<TransactionAccountNonce>): Promise<Array<TransactionReceipt>> {

@@ -1,6 +1,6 @@
 import { providers, Wallet } from "ethers"
 import { ConnectionInfo } from "ethers/lib/utils"
-import { DEFAULT_FLASHBOTS_RELAY, FlashbotsBundleProvider } from "./index";
+import { FlashbotsBundleProvider } from "./index";
 
 const ETHEREUM_RPC_URL = process.env.ETHEREUM_RPC_URL || "http://127.0.0.1:8545"
 const FLASHBOTS_KEY_ID = process.env.FLASHBOTS_KEY_ID || '';
@@ -15,9 +15,7 @@ provider.getBlockNumber().then(async (blockNumber) => {
 
   const wallet = Wallet.createRandom().connect(provider)
 
-  const minTimestamp = (await provider.getBlock(blockNumber)).timestamp
-  const maxTimestamp = minTimestamp + 120
-  const f = await flashbotsProvider.sendBundle([
+  const signedTransactions = await flashbotsProvider.signBundle([
       {
         signer: wallet,
         transaction: {
@@ -26,23 +24,18 @@ provider.getBlockNumber().then(async (blockNumber) => {
         }
       },
       {
-        signedTransaction: "0xf85f018082520894b97201736082824567552eb0c0f12110edf9ab1280801ca02c5a7eb8dc805a910786ace69d09fcde637e3b36762d7ceb1e16098be380f4cfa041d248e0e09d72254d7ad959d1e3f23bb662865c83e2f15bef23142eb6d922d4"
+        signedTransaction: "0xf85f8080825208947a76570ef1d933582c354cbc02c22415e243901880801ca0a0e5096067fa6a62874c9ea2bcc774f2dcf83fd73814db89258af9b4e66092d1a045410ddeda97315d5250d17461930edd6ad46be5351d70c9d02929a1cbd07645"
       },
-      {
-        signer: wallet,
-        transaction: {
-          to: wallet.address,
-          gasPrice: 0
-        }
-      },
-    ],
-    blockNumber + 3,
-    {
-      minTimestamp,
-      maxTimestamp
-    }
+    ]
   )
+  console.log({signedTransactions})
+  const simulation = await flashbotsProvider.simulate(signedTransactions, blockNumber + 1)
+  console.log("simulation", JSON.stringify(simulation, null, 2))
 
-  console.log(await f.wait())
-  console.log(await f.receipts())
+  const bundleSubmission = await flashbotsProvider.sendRawBundle(signedTransactions, blockNumber + 1)
+  console.log("bundle submitted, waiting")
+  const waitResponse = await bundleSubmission.wait();
+  console.log({waitResponse})
+  const bundleSubmissionSimulation = await bundleSubmission.simulate();
+  console.log(bundleSubmissionSimulation)
 })
