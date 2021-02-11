@@ -1,13 +1,14 @@
 {
   "name": "@flashbots/ethers-provider-bundle",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "scripts": {
     "demo": "npx ts-node --project tsconfig.json src/demo.ts",
     "build": "npx tsc",
-    "prepare": "npm run build",
+    "clean": "rm -rf build/",
+    "prepare": "npm run clean && npm run build",
     "lint": "npx eslint src"
   },
   "author": "",
