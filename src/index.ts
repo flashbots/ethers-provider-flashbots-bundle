@@ -41,11 +41,21 @@ interface FlashbotsTransactionResponse {
   receipts: () => Promise<Array<TransactionReceipt>>
 }
 
-interface TransactionSimulation {
-  gasUsed: number;
+interface TransactionSimulationBase {
   txHash: string;
+  gasUsed: number;
+}
+
+interface TransactionSimulationSuccess extends TransactionSimulationBase {
   value: string;
 }
+
+interface TransactionSimulationRevert extends TransactionSimulationBase {
+  error: string;
+  revert: string;
+}
+
+export type TransactionSimulation = TransactionSimulationSuccess | TransactionSimulationRevert
 
 interface SimulationResponse { // eslint-disable-line @typescript-eslint/no-empty-interface
   bundleHash: string;
