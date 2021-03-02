@@ -128,7 +128,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     opts?: FlashbotsOptions
   ): Promise<FlashbotsTransactionResponse> {
     const params = [signedBundledTransactions, `0x${targetBlockNumber.toString(16)}`, opts?.minTimestamp || 0, opts?.maxTimestamp || 0]
-    const request = this.prepareRequest('eth_sendBundle', params).toString()
+    const request = JSON.stringify(this.prepareBundleRequest('eth_sendBundle', params))
     await this.request(request)
 
     const bundleTransactions = signedBundledTransactions.map((signedTransaction) => {
@@ -272,7 +272,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
         : await this.extrapolateTimestamp(blockTag, blockDetails)
 
     const params = [signedBundledTransactions, evmBlockNumber, evmBlockStateNumber, evmTimestamp]
-    const request = this.prepareRequest('eth_callBundle', params).toString()
+    const request = JSON.stringify(this.prepareBundleRequest('eth_callBundle', params))
     const callResult = await this.request(request)
 
     return {
@@ -298,5 +298,14 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
 
   private async fetchReceipts(bundledTransactions: Array<TransactionAccountNonce>): Promise<Array<TransactionReceipt>> {
     return Promise.all(bundledTransactions.map((bundledTransaction) => this.genericProvider.getTransactionReceipt(bundledTransaction.hash)))
+  }
+
+  private prepareBundleRequest(method: 'eth_callBundle' | 'eth_sendBundle', params: Array<string | number | string[]>) {
+    return {
+      method: method,
+      params: params,
+      id: this._nextId++,
+      jsonrpc: '2.0'
+    }
   }
 }
