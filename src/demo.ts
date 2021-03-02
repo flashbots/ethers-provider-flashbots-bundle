@@ -3,15 +3,15 @@ import { ConnectionInfo } from 'ethers/lib/utils'
 import { FlashbotsBundleProvider } from './index'
 
 const ETHEREUM_RPC_URL = process.env.ETHEREUM_RPC_URL || 'http://127.0.0.1:8545'
-const FLASHBOTS_KEY_ID = process.env.FLASHBOTS_KEY_ID || ''
-const FLASHBOTS_SECRET = process.env.FLASHBOTS_SECRET || ''
+const FLASHBOTS_AUTH_KEY = process.env.FLASHBOTS_AUTH_KEY
 
 const connection: ConnectionInfo = { url: ETHEREUM_RPC_URL }
 const NETWORK_INFO = { chainId: 1, ensAddress: '', name: 'mainnet' }
 const provider = new providers.JsonRpcProvider(connection, NETWORK_INFO)
 
 provider.getBlockNumber().then(async (blockNumber) => {
-  const flashbotsProvider = await FlashbotsBundleProvider.create(provider, FLASHBOTS_KEY_ID, FLASHBOTS_SECRET)
+  const authSigner = FLASHBOTS_AUTH_KEY ? new Wallet(FLASHBOTS_AUTH_KEY) : Wallet.createRandom()
+  const flashbotsProvider = await FlashbotsBundleProvider.create(provider, authSigner)
 
   const wallet = Wallet.createRandom().connect(provider)
 

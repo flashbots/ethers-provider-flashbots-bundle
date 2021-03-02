@@ -1,9 +1,9 @@
-import { BigNumber, ethers, providers, Signer } from 'ethers'
-import { TransactionRequest, TransactionReceipt } from '@ethersproject/abstract-provider'
-import { BaseProvider } from '@ethersproject/providers'
-import { ConnectionInfo } from '@ethersproject/web'
+import { BlockTag, TransactionReceipt, TransactionRequest } from '@ethersproject/abstract-provider'
 import { Networkish } from '@ethersproject/networks'
-import { BlockTag } from '@ethersproject/abstract-provider'
+import { BaseProvider } from '@ethersproject/providers'
+import { ConnectionInfo, fetchJson } from '@ethersproject/web'
+import { BigNumber, ethers, providers, Signer } from 'ethers'
+import { id } from 'ethers/lib/utils'
 
 export const DEFAULT_FLASHBOTS_RELAY = 'https://relay.flashbots.net'
 
@@ -71,10 +71,14 @@ const SECONDS_PER_BLOCK = 15
 
 export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   private genericProvider: BaseProvider
+  private authSigner: Signer
+  private connectionInfo: ConnectionInfo
 
-  constructor(genericProvider: BaseProvider, connectionInfoOrUrl: ConnectionInfo, network: Networkish) {
+  constructor(genericProvider: BaseProvider, authSigner: Signer, connectionInfoOrUrl: ConnectionInfo, network: Networkish) {
     super(connectionInfoOrUrl, network)
     this.genericProvider = genericProvider
+    this.authSigner = authSigner
+    this.connectionInfo = connectionInfoOrUrl
   }
 
   static async throttleCallback(): Promise<boolean> {
@@ -84,8 +88,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
 
   static async create(
     genericProvider: BaseProvider,
-    flashbotsKeyId: string,
-    flashbotsSecret: string,
+    authSigner: Signer,
     connectionInfoOrUrl?: ConnectionInfo | string,
     network?: Networkish
   ): Promise<FlashbotsBundleProvider> {
@@ -98,7 +101,6 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
             ...connectionInfoOrUrl
           }
     if (connectionInfo.headers === undefined) connectionInfo.headers = {}
-    connectionInfo.headers.Authorization = `${flashbotsKeyId}:${flashbotsSecret}`
     connectionInfo.throttleCallback = FlashbotsBundleProvider.throttleCallback
     const networkish: Networkish = {
       chainId: 0,
@@ -117,20 +119,18 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       networkish.chainId = (await genericProvider.getNetwork()).chainId
     }
 
-    return new FlashbotsBundleProvider(genericProvider, connectionInfo, networkish)
+    return new FlashbotsBundleProvider(genericProvider, authSigner, connectionInfo, networkish)
   }
 
-  async sendRawBundle(
+  public async sendRawBundle(
     signedBundledTransactions: Array<string>,
     targetBlockNumber: number,
     opts?: FlashbotsOptions
   ): Promise<FlashbotsTransactionResponse> {
-    await this.send('eth_sendBundle', [
-      signedBundledTransactions,
-      `0x${targetBlockNumber.toString(16)}`,
-      opts?.minTimestamp || 0,
-      opts?.maxTimestamp || 0
-    ])
+    const params = [signedBundledTransactions, `0x${targetBlockNumber.toString(16)}`, opts?.minTimestamp || 0, opts?.maxTimestamp || 0]
+    const request = this.prepareRequest('eth_sendBundle', params).toString()
+    await this.request(request)
+
     const bundleTransactions = signedBundledTransactions.map((signedTransaction) => {
       const transactionDetails = ethers.utils.parseTransaction(signedTransaction)
       return {
@@ -153,7 +153,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     }
   }
 
-  async sendBundle(
+  public async sendBundle(
     bundledTransactions: Array<FlashbotsBundleTransaction | FlashbotsBundleRawTransaction>,
     targetBlockNumber: number,
     opts?: FlashbotsOptions
@@ -253,7 +253,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     })
   }
 
-  async simulate(
+  public async simulate(
     signedBundledTransactions: Array<string>,
     blockTag: BlockTag,
     stateBlockTag?: BlockTag,
@@ -270,13 +270,23 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
         : blockTagDetails !== null
         ? blockTagDetails.timestamp
         : await this.extrapolateTimestamp(blockTag, blockDetails)
-    const callResult = await this.send('eth_callBundle', [signedBundledTransactions, evmBlockNumber, evmBlockStateNumber, evmTimestamp])
+
+    const params = [signedBundledTransactions, evmBlockNumber, evmBlockStateNumber, evmTimestamp]
+    const request = this.prepareRequest('eth_callBundle', params).toString()
+    const callResult = await this.request(request)
+
     return {
       bundleHash: callResult.bundleHash,
       coinbaseDiff: BigNumber.from(callResult.coinbaseDiff),
       results: callResult.results,
       totalGasUsed: callResult.results.reduce((a: number, b: TransactionSimulation) => a + b.gasUsed, 0)
     }
+  }
+
+  private async request(request: string) {
+    const connectionInfo = { ...this.connectionInfo }
+    connectionInfo.headers = { Authorization: (await this.authSigner?.signMessage(id(request))) as string, ...this.connectionInfo.headers }
+    return fetchJson(connectionInfo, request)
   }
 
   private async extrapolateTimestamp(blockTag: BlockTag, latestBlockDetails: providers.Block) {
