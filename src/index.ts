@@ -42,17 +42,17 @@ interface FlashbotsTransactionResponse {
 }
 
 interface TransactionSimulationBase {
-  txHash: string;
-  gasUsed: number;
+  txHash: string
+  gasUsed: number
 }
 
 interface TransactionSimulationSuccess extends TransactionSimulationBase {
-  value: string;
+  value: string
 }
 
 interface TransactionSimulationRevert extends TransactionSimulationBase {
-  error: string;
-  revert: string;
+  error: string
+  revert: string
 }
 
 export type TransactionSimulation = TransactionSimulationSuccess | TransactionSimulationRevert
