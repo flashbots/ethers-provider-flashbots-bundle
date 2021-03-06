@@ -273,7 +273,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
 
     const params = [signedBundledTransactions, evmBlockNumber, evmBlockStateNumber, evmTimestamp]
     const request = JSON.stringify(this.prepareBundleRequest('eth_callBundle', params))
-    const callResult = await this.request(request)
+    const callResult = (await this.request(request)).result
 
     return {
       bundleHash: callResult.bundleHash,
