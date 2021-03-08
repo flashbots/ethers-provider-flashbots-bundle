@@ -57,12 +57,22 @@ export interface TransactionSimulationRevert extends TransactionSimulationBase {
 
 export type TransactionSimulation = TransactionSimulationSuccess | TransactionSimulationRevert
 
-export interface SimulationResponse {
+export interface SimulationResponseError {
+  error: {
+    message: string
+    code: number
+  }
+}
+
+export interface SimulationResponseSuccess {
   bundleHash: string
   coinbaseDiff: BigNumber
   results: Array<TransactionSimulation>
   totalGasUsed: number
+  firstRevert?: TransactionSimulation
 }
+
+export type SimulationResponse = SimulationResponseSuccess | SimulationResponseError
 
 const TIMEOUT_MS = 5 * 60 * 1000
 
@@ -272,13 +282,23 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
 
     const params = [signedBundledTransactions, evmBlockNumber, evmBlockStateNumber, evmTimestamp]
     const request = JSON.stringify(this.prepareBundleRequest('eth_callBundle', params))
-    const callResult = (await this.request(request)).result
+    const response = await this.request(request)
+    if (response.error !== undefined) {
+      return {
+        error: {
+          message: response.error.message,
+          code: response.error.code
+        }
+      }
+    }
 
+    const callResult = response.result
     return {
       bundleHash: callResult.bundleHash,
       coinbaseDiff: BigNumber.from(callResult.coinbaseDiff),
       results: callResult.results,
-      totalGasUsed: callResult.results.reduce((a: number, b: TransactionSimulation) => a + b.gasUsed, 0)
+      totalGasUsed: callResult.results.reduce((a: number, b: TransactionSimulation) => a + b.gasUsed, 0),
+      firstRevert: callResult.results.find((txSim: TransactionSimulation) => 'revert' in txSim)
     }
   }
 

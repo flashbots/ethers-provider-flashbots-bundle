@@ -1,6 +1,6 @@
 import { providers, Wallet } from 'ethers'
 import { ConnectionInfo } from 'ethers/lib/utils'
-import { FlashbotsBundleProvider } from './index'
+import { FlashbotsBundleProvider, FlashbotsBundleResolution } from './index'
 
 const ETHEREUM_RPC_URL = process.env.ETHEREUM_RPC_URL || 'http://127.0.0.1:8545'
 const FLASHBOTS_AUTH_KEY = process.env.FLASHBOTS_AUTH_KEY
@@ -30,12 +30,16 @@ provider.getBlockNumber().then(async (blockNumber) => {
   ])
   console.log({ signedTransactions })
   const simulation = await flashbotsProvider.simulate(signedTransactions, blockNumber + 1)
-  console.log('simulation', JSON.stringify(simulation, null, 2))
 
+  // Using TypeScript discrimination
+  if ('error' in simulation) {
+    console.log(`Simulation Error: ${simulation.error.message}`)
+  } else {
+    console.log(`Simulation Success: ${JSON.stringify(simulation, null, 2)}`)
+  }
   const bundleSubmission = await flashbotsProvider.sendRawBundle(signedTransactions, blockNumber + 1)
   console.log('bundle submitted, waiting')
   const waitResponse = await bundleSubmission.wait()
-  console.log({ waitResponse })
   const bundleSubmissionSimulation = await bundleSubmission.simulate()
-  console.log(bundleSubmissionSimulation)
+  console.log({ bundleSubmissionSimulation, waitResponse: FlashbotsBundleResolution[waitResponse] })
 })
