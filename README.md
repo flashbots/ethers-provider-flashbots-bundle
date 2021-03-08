@@ -3,11 +3,11 @@ ethers-provider-flashbots-bundle
 
 Contains the `FlashbotsBundleProvider` ethers.js provider to provide high-level access to eth_sendBundle rpc endpoint.
 
-Flashbots-enabled relays and miners will expose a single jsonrpc endpoint:  `eth_sendBundle`. Since this is a brand-new, non-standard endpoint, ethers.js and other libraries do not natively support these requests (like `getTransactionCount`). In order to interact with `eth_sendBundle`, you will also need access to another full-featured endpoint for nonce-calculation, gas estimation, and transaction status.
+Flashbots-enabled relays and miners will expose two new jsonrpc endpoint:  `eth_sendBundle` and `eth_callBundle`. Since these are brand-new, non-standard endpoints, ethers.js and other libraries do not natively support these requests (like `getTransactionCount`). In order to interact with these endpoints, you will also need access to another full-featured (non-Flashbots) endpoint for nonce-calculation, gas estimation, and transaction status.
 
 This library is not a fully functional ethers.js implementation, just a simple provider class, designed to interact with your existing ethers.js v5 module.
 
-You can pass in a generic ethers.js provider to the flashbots provider in the constructor:
+You can pass in a generic ethers.js provider to the Flashbots provider in the constructor:
 
 ```
 const NETWORK_INFO = {chainId: 1, ensAddress: '', name: 'mainnet'}
@@ -15,8 +15,11 @@ const NETWORK_INFO = {chainId: 1, ensAddress: '', name: 'mainnet'}
 // Standard json rpc provider directly from ethers.js 
 const provider = new providers.JsonRpcProvider({url: ETHEREUM_RPC_URL}, NETWORK_INFO)
 
+// authSigner is an Ethereum private key that does NOT store funds and is NOT your bot's primary key.
+// This is an identifying key for signing payloads to establish reputation and whitelisting 
+const authSigner = '0x0000000000000000000000000000000000000000000000000000000000000000' 
 // flashbots provider requires passing in a standard provider
-const flashbotsProvider = await FlashbotsBundleProvider.create(provider, flashbotsApiKey, flashbotsSecret)
+const flashbotsProvider = await FlashbotsBundleProvider.create(provider, authSigner)
 ``` 
 
 The flashbotsProvider provides the sendBundle function:
@@ -24,6 +27,17 @@ The flashbotsProvider provides the sendBundle function:
 ```
 flashbotsProvider.sendBundle(bundledTransactions: Array<FlashbotsBundleTransaction | FlashbotsBundleRawTransaction>, targetBlockNumber: number)
     => Promise<FlashbotsTransactionResponse>
+```
+
+and simulate function:
+
+```
+flashbotsProvider.simulate(
+    signedBundledTransactions: Array<string>,
+    blockTag: BlockTag,
+    stateBlockTag?: BlockTag,
+    blockTimestamp?: number) 
+      => Promise<SimulationResponse>
 ```
 
 Example
@@ -74,4 +88,4 @@ A high-level object which contains metadata available at transaction submission 
 
 How to run demo.ts
 -------------------
-Included is a simple demo of how to construct the FlashbotsProvider with api key authentication and submit a [non-functional] bundle. This will not yield any mev, but could serve as a sample initialization to help integrate into your own functional searcher.
+Included is a simple demo of how to construct the FlashbotsProvider with auth signer authentication and submit a [non-functional] bundle. This will not yield any mev, but could serve as a sample initialization to help integrate into your own functional searcher.
