@@ -286,7 +286,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   private async request(request: string) {
     const connectionInfo = { ...this.connectionInfo }
     connectionInfo.headers = {
-      'X-Flashbots-Signature': (await this.authSigner.signMessage(id(request))) as string,
+      'X-Flashbots-Signature': `${await this.authSigner.getAddress()}:${await this.authSigner.signMessage(id(request))}`,
       ...this.connectionInfo.headers
     }
     return fetchJson(connectionInfo, request)
