@@ -59,8 +59,8 @@ export type TransactionSimulation = TransactionSimulationSuccess | TransactionSi
 
 export interface SimulationResponseError {
   error: {
-    message: string,
-    code: number,
+    message: string
+    code: number
   }
 }
 
@@ -68,12 +68,11 @@ export interface SimulationResponseSuccess {
   bundleHash: string
   coinbaseDiff: BigNumber
   results: Array<TransactionSimulation>
-  totalGasUsed: number,
-  firstRevert?: TransactionSimulation,
+  totalGasUsed: number
+  firstRevert?: TransactionSimulation
 }
 
 export type SimulationResponse = SimulationResponseSuccess | SimulationResponseError
-
 
 const TIMEOUT_MS = 5 * 60 * 1000
 
@@ -283,13 +282,13 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
 
     const params = [signedBundledTransactions, evmBlockNumber, evmBlockStateNumber, evmTimestamp]
     const request = JSON.stringify(this.prepareBundleRequest('eth_callBundle', params))
-    const response = await this.request(request);
+    const response = await this.request(request)
     if (response.error !== undefined) {
       return {
         error: {
           message: response.error.message,
-          code: response.error.code,
-        },
+          code: response.error.code
+        }
       }
     }
 
