@@ -27,38 +27,37 @@ export interface FlashbotsOptions {
   maxTimestamp?: number
 }
 
-interface TransactionAccountNonce {
+export interface TransactionAccountNonce {
   hash: string
   signedTransaction: string
   account: string
   nonce: number
 }
 
-interface FlashbotsTransactionResponse {
+export interface FlashbotsTransactionResponse {
   bundleTransactions: Array<TransactionAccountNonce>
   wait: () => Promise<FlashbotsBundleResolution>
   simulate: () => void
   receipts: () => Promise<Array<TransactionReceipt>>
 }
 
-interface TransactionSimulationBase {
+export interface TransactionSimulationBase {
   txHash: string
   gasUsed: number
 }
 
-interface TransactionSimulationSuccess extends TransactionSimulationBase {
+export interface TransactionSimulationSuccess extends TransactionSimulationBase {
   value: string
 }
 
-interface TransactionSimulationRevert extends TransactionSimulationBase {
+export interface TransactionSimulationRevert extends TransactionSimulationBase {
   error: string
   revert: string
 }
 
 export type TransactionSimulation = TransactionSimulationSuccess | TransactionSimulationRevert
 
-interface SimulationResponse {
-  // eslint-disable-line @typescript-eslint/no-empty-interface
+export interface SimulationResponse {
   bundleHash: string
   coinbaseDiff: BigNumber
   results: Array<TransactionSimulation>
