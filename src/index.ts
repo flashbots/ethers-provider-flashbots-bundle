@@ -57,7 +57,7 @@ export interface TransactionSimulationRevert extends TransactionSimulationBase {
 
 export type TransactionSimulation = TransactionSimulationSuccess | TransactionSimulationRevert
 
-export interface SimulationResponseError {
+export interface RelayResponseError {
   error: {
     message: string
     code: number
@@ -72,11 +72,35 @@ export interface SimulationResponseSuccess {
   firstRevert?: TransactionSimulation
 }
 
-export type SimulationResponse = SimulationResponseSuccess | SimulationResponseError
+export type SimulationResponse = SimulationResponseSuccess | RelayResponseError
+
+export interface GetUserStatsResponseSuccess {
+  signing_address: string
+  blocks_won_total: number
+  bundles_submitted_total: number
+  bundles_error_total: number
+  avg_gas_price_gwei: number
+  blocks_won_last_7d: number
+  bundles_submitted_last_7d: number
+  bundles_error_7d: number
+  avg_gas_price_gwei_last_7d: number
+  blocks_won_last_numberd: number
+  bundles_submitted_last_numberd: number
+  bundles_error_numberd: number
+  avg_gas_price_gwei_last_numberd: number
+  blocks_won_last_numberh: number
+  bundles_submitted_last_numberh: number
+  bundles_error_numberh: number
+  avg_gas_price_gwei_last_numberh: number
+  blocks_won_last_5m: number
+  bundles_submitted_last_5m: number
+  bundles_error_5m: number
+  avg_gas_price_gwei_last_5m: number
+}
+
+type GetUserStatsResponse = GetUserStatsResponseSuccess | RelayResponseError
 
 const TIMEOUT_MS = 5 * 60 * 1000
-
-const SECONDS_PER_BLOCK = 15
 
 export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   private genericProvider: BaseProvider
@@ -156,7 +180,9 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       simulate: () =>
         this.simulate(
           bundleTransactions.map((tx) => tx.signedTransaction),
-          targetBlockNumber
+          targetBlockNumber,
+          undefined,
+          opts?.minTimestamp
         ),
       receipts: () => this.fetchReceipts(bundleTransactions)
     }
@@ -262,7 +288,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     })
   }
 
-  public async getUserStats(): Promise<SimulationResponse> {
+  public async getUserStats(): Promise<GetUserStatsResponse> {
     const blockDetails = await this.genericProvider.getBlock('latest')
     const evmBlockNumber = `0x${blockDetails.number.toString(16)}`
 
@@ -305,7 +331,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       evmBlockStateNumber = stateBlockTag
     }
 
-    const params: any[] = [signedBundledTransactions, evmBlockNumber, evmBlockStateNumber]
+    const params: Array<string[] | string | number> = [signedBundledTransactions, evmBlockNumber, evmBlockStateNumber]
     if (blockTimestamp) {
       params.push(blockTimestamp)
     }
