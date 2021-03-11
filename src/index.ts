@@ -57,7 +57,7 @@ export interface TransactionSimulationRevert extends TransactionSimulationBase {
 
 export type TransactionSimulation = TransactionSimulationSuccess | TransactionSimulationRevert
 
-export interface SimulationResponseError {
+export interface RelayResponseError {
   error: {
     message: string
     code: number
@@ -72,11 +72,37 @@ export interface SimulationResponseSuccess {
   firstRevert?: TransactionSimulation
 }
 
-export type SimulationResponse = SimulationResponseSuccess | SimulationResponseError
+export type SimulationResponse = SimulationResponseSuccess | RelayResponseError
+
+export interface GetUserStatsResponseSuccess {
+  signing_address: string
+  blocks_won_total: number
+  bundles_submitted_total: number
+  bundles_error_total: number
+  avg_gas_price_gwei: number
+  blocks_won_last_7d: number
+  bundles_submitted_last_7d: number
+  bundles_error_7d: number
+  avg_gas_price_gwei_last_7d: number
+  blocks_won_last_numberd: number
+  bundles_submitted_last_numberd: number
+  bundles_error_numberd: number
+  avg_gas_price_gwei_last_numberd: number
+  blocks_won_last_numberh: number
+  bundles_submitted_last_numberh: number
+  bundles_error_numberh: number
+  avg_gas_price_gwei_last_numberh: number
+  blocks_won_last_5m: number
+  bundles_submitted_last_5m: number
+  bundles_error_5m: number
+  avg_gas_price_gwei_last_5m: number
+}
+
+export type GetUserStatsResponse = GetUserStatsResponseSuccess | RelayResponseError
+
+type RpcParams = Array<string[] | string | number>
 
 const TIMEOUT_MS = 5 * 60 * 1000
-
-const SECONDS_PER_BLOCK = 15
 
 export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   private genericProvider: BaseProvider
@@ -156,7 +182,9 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       simulate: () =>
         this.simulate(
           bundleTransactions.map((tx) => tx.signedTransaction),
-          targetBlockNumber
+          targetBlockNumber,
+          undefined,
+          opts?.minTimestamp
         ),
       receipts: () => this.fetchReceipts(bundleTransactions)
     }
@@ -262,25 +290,53 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     })
   }
 
+  public async getUserStats(): Promise<GetUserStatsResponse> {
+    const blockDetails = await this.genericProvider.getBlock('latest')
+    const evmBlockNumber = `0x${blockDetails.number.toString(16)}`
+
+    const params = [evmBlockNumber]
+    const request = JSON.stringify(this.prepareBundleRequest('flashbots_getUserStats', params))
+    const response = await this.request(request)
+    if (response.error !== undefined) {
+      return {
+        error: {
+          message: response.error.message,
+          code: response.error.code
+        }
+      }
+    }
+
+    return response.result
+  }
+
   public async simulate(
     signedBundledTransactions: Array<string>,
     blockTag: BlockTag,
     stateBlockTag?: BlockTag,
     blockTimestamp?: number
   ): Promise<SimulationResponse> {
-    const blockTagDetails = await this.genericProvider.getBlock(blockTag)
-    const blockDetails = blockTagDetails !== null ? blockTagDetails : await this.genericProvider.getBlock('latest')
+    let evmBlockNumber: string
+    if (typeof blockTag === 'number') {
+      evmBlockNumber = `0x${blockTag.toString(16)}`
+    } else {
+      const blockTagDetails = await this.genericProvider.getBlock(blockTag)
+      const blockDetails = blockTagDetails !== null ? blockTagDetails : await this.genericProvider.getBlock('latest')
+      evmBlockNumber = `0x${blockDetails.number.toString(16)}`
+    }
 
-    const evmBlockNumber = `0x${blockDetails.number.toString(16)}`
-    const evmBlockStateNumber = stateBlockTag !== undefined ? stateBlockTag : `0x${(blockDetails.number - 1).toString(16)}`
-    const evmTimestamp =
-      blockTimestamp !== undefined
-        ? blockTimestamp
-        : blockTagDetails !== null
-        ? blockTagDetails.timestamp
-        : await this.extrapolateTimestamp(blockTag, blockDetails)
+    let evmBlockStateNumber: string
+    if (typeof stateBlockTag === 'number') {
+      evmBlockStateNumber = `0x${blockTag.toString(16)}`
+    } else if (!stateBlockTag) {
+      evmBlockStateNumber = 'latest'
+    } else {
+      evmBlockStateNumber = stateBlockTag
+    }
 
-    const params = [signedBundledTransactions, evmBlockNumber, evmBlockStateNumber, evmTimestamp]
+    const params: RpcParams = [signedBundledTransactions, evmBlockNumber, evmBlockStateNumber]
+    if (blockTimestamp) {
+      params.push(blockTimestamp)
+    }
     const request = JSON.stringify(this.prepareBundleRequest('eth_callBundle', params))
     const response = await this.request(request)
     if (response.error !== undefined) {
@@ -311,18 +367,11 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     return fetchJson(connectionInfo, request)
   }
 
-  private async extrapolateTimestamp(blockTag: BlockTag, latestBlockDetails: providers.Block) {
-    if (typeof blockTag !== 'number') throw new Error('blockTag must be number to extrapolate')
-    const blockDelta = blockTag - latestBlockDetails.number
-    if (blockDelta < 0) throw new Error('block extrapolation negative')
-    return latestBlockDetails.timestamp + blockDelta * SECONDS_PER_BLOCK
-  }
-
   private async fetchReceipts(bundledTransactions: Array<TransactionAccountNonce>): Promise<Array<TransactionReceipt>> {
     return Promise.all(bundledTransactions.map((bundledTransaction) => this.genericProvider.getTransactionReceipt(bundledTransaction.hash)))
   }
 
-  private prepareBundleRequest(method: 'eth_callBundle' | 'eth_sendBundle', params: Array<string | number | string[]>) {
+  private prepareBundleRequest(method: 'eth_callBundle' | 'eth_sendBundle' | 'flashbots_getUserStats', params: RpcParams) {
     return {
       method: method,
       params: params,
