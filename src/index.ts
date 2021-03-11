@@ -98,7 +98,9 @@ export interface GetUserStatsResponseSuccess {
   avg_gas_price_gwei_last_5m: number
 }
 
-type GetUserStatsResponse = GetUserStatsResponseSuccess | RelayResponseError
+export type GetUserStatsResponse = GetUserStatsResponseSuccess | RelayResponseError
+
+type RpcParams = Array<string[] | string | number>
 
 const TIMEOUT_MS = 5 * 60 * 1000
 
@@ -331,7 +333,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       evmBlockStateNumber = stateBlockTag
     }
 
-    const params: Array<string[] | string | number> = [signedBundledTransactions, evmBlockNumber, evmBlockStateNumber]
+    const params: RpcParams = [signedBundledTransactions, evmBlockNumber, evmBlockStateNumber]
     if (blockTimestamp) {
       params.push(blockTimestamp)
     }
@@ -369,10 +371,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     return Promise.all(bundledTransactions.map((bundledTransaction) => this.genericProvider.getTransactionReceipt(bundledTransaction.hash)))
   }
 
-  private prepareBundleRequest(
-    method: 'eth_callBundle' | 'eth_sendBundle' | 'flashbots_getUserStats',
-    params: Array<string | number | string[]>
-  ) {
+  private prepareBundleRequest(method: 'eth_callBundle' | 'eth_sendBundle' | 'flashbots_getUserStats', params: RpcParams) {
     return {
       method: method,
       params: params,
