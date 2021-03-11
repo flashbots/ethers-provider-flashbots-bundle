@@ -262,6 +262,25 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     })
   }
 
+  public async getUserStats(): Promise<SimulationResponse> {
+    const blockDetails = await this.genericProvider.getBlock('latest')
+    const evmBlockNumber = `0x${blockDetails.number.toString(16)}`
+
+    const params = [evmBlockNumber]
+    const request = JSON.stringify(this.prepareBundleRequest('flashbots_getUserStats', params))
+    const response = await this.request(request)
+    if (response.error !== undefined) {
+      return {
+        error: {
+          message: response.error.message,
+          code: response.error.code
+        }
+      }
+    }
+
+    return response.result
+  }
+
   public async simulate(
     signedBundledTransactions: Array<string>,
     blockTag: BlockTag,
@@ -324,7 +343,10 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     return Promise.all(bundledTransactions.map((bundledTransaction) => this.genericProvider.getTransactionReceipt(bundledTransaction.hash)))
   }
 
-  private prepareBundleRequest(method: 'eth_callBundle' | 'eth_sendBundle', params: Array<string | number | string[]>) {
+  private prepareBundleRequest(
+    method: 'eth_callBundle' | 'eth_sendBundle' | 'flashbots_getUserStats',
+    params: Array<string | number | string[]>
+  ) {
     return {
       method: method,
       params: params,
