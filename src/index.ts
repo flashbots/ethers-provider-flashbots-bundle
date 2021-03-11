@@ -268,19 +268,28 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     stateBlockTag?: BlockTag,
     blockTimestamp?: number
   ): Promise<SimulationResponse> {
-    const blockTagDetails = await this.genericProvider.getBlock(blockTag)
-    const blockDetails = blockTagDetails !== null ? blockTagDetails : await this.genericProvider.getBlock('latest')
+    let evmBlockNumber: string
+    if (typeof blockTag === 'number') {
+      evmBlockNumber = `0x${blockTag.toString(16)}`
+    } else {
+      const blockTagDetails = await this.genericProvider.getBlock(blockTag)
+      const blockDetails = blockTagDetails !== null ? blockTagDetails : await this.genericProvider.getBlock('latest')
+      evmBlockNumber = `0x${blockDetails.number.toString(16)}`
+    }
 
-    const evmBlockNumber = `0x${blockDetails.number.toString(16)}`
-    const evmBlockStateNumber = stateBlockTag !== undefined ? stateBlockTag : `0x${(blockDetails.number - 1).toString(16)}`
-    const evmTimestamp =
-      blockTimestamp !== undefined
-        ? blockTimestamp
-        : blockTagDetails !== null
-        ? blockTagDetails.timestamp
-        : await this.extrapolateTimestamp(blockTag, blockDetails)
+    let evmBlockStateNumber: string
+    if (typeof stateBlockTag === 'number') {
+      evmBlockStateNumber = `0x${blockTag.toString(16)}`
+    } else if (!stateBlockTag) {
+      evmBlockStateNumber = 'latest'
+    } else {
+      evmBlockStateNumber = stateBlockTag
+    }
 
-    const params = [signedBundledTransactions, evmBlockNumber, evmBlockStateNumber, evmTimestamp]
+    const params: any[] = [signedBundledTransactions, evmBlockNumber, evmBlockStateNumber]
+    if (blockTimestamp) {
+      params.push(blockTimestamp)
+    }
     const request = JSON.stringify(this.prepareBundleRequest('eth_callBundle', params))
     const response = await this.request(request)
     if (response.error !== undefined) {
@@ -309,13 +318,6 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       ...this.connectionInfo.headers
     }
     return fetchJson(connectionInfo, request)
-  }
-
-  private async extrapolateTimestamp(blockTag: BlockTag, latestBlockDetails: providers.Block) {
-    if (typeof blockTag !== 'number') throw new Error('blockTag must be number to extrapolate')
-    const blockDelta = blockTag - latestBlockDetails.number
-    if (blockDelta < 0) throw new Error('block extrapolation negative')
-    return latestBlockDetails.timestamp + blockDelta * SECONDS_PER_BLOCK
   }
 
   private async fetchReceipts(bundledTransactions: Array<TransactionAccountNonce>): Promise<Array<TransactionReceipt>> {
