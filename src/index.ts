@@ -37,7 +37,7 @@ export interface TransactionAccountNonce {
 export interface FlashbotsTransactionResponse {
   bundleTransactions: Array<TransactionAccountNonce>
   wait: () => Promise<FlashbotsBundleResolution>
-  simulate: () => void
+  simulate: () => Promise<SimulationResponse>
   receipts: () => Promise<Array<TransactionReceipt>>
 }
 
