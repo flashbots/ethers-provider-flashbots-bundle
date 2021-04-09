@@ -39,6 +39,9 @@ provider.getBlockNumber().then(async (blockNumber) => {
   }
   const bundleSubmission = await flashbotsProvider.sendRawBundle(signedTransactions, blockNumber + 1)
   console.log('bundle submitted, waiting')
+  if ('error' in bundleSubmission) {
+    throw new Error(bundleSubmission.error.message)
+  }
   const waitResponse = await bundleSubmission.wait()
   const bundleSubmissionSimulation = await bundleSubmission.simulate()
   console.log({ bundleSubmissionSimulation, waitResponse: FlashbotsBundleResolution[waitResponse] })
