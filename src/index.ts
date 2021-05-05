@@ -25,6 +25,7 @@ export interface FlashbotsBundleTransaction {
 export interface FlashbotsOptions {
   minTimestamp?: number
   maxTimestamp?: number
+  revertingTxHashes?: Array<string>
 }
 
 export interface TransactionAccountNonce {
@@ -164,15 +165,15 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     targetBlockNumber: number,
     opts?: FlashbotsOptions
   ): Promise<FlashbotsTransaction> {
-    const params = [
-      {
-        txs: signedBundledTransactions,
-        blockNumber: `0x${targetBlockNumber.toString(16)}`,
-        minTimestamp: opts?.minTimestamp || 0,
-        maxTimestamp: opts?.maxTimestamp || 0
-      }
-    ]
-    const request = JSON.stringify(this.prepareBundleRequest('eth_sendBundle', params))
+    const params = {
+      txs: signedBundledTransactions,
+      blockNumber: `0x${targetBlockNumber.toString(16)}`,
+      minTimestamp: opts?.minTimestamp,
+      maxTimestamp: opts?.maxTimestamp,
+      revertingTxHashes: opts?.revertingTxHashes
+    }
+
+    const request = JSON.stringify(this.prepareBundleRequest('eth_sendBundle', [params]))
     const response = await this.request(request)
     if (response.error !== undefined) {
       return {
