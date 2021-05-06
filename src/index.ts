@@ -25,6 +25,7 @@ export interface FlashbotsBundleTransaction {
 export interface FlashbotsOptions {
   minTimestamp?: number
   maxTimestamp?: number
+  revertingTxHashes?: Array<string>
 }
 
 export interface TransactionAccountNonce {
@@ -74,6 +75,8 @@ export interface SimulationResponseSuccess {
 
 export type SimulationResponse = SimulationResponseSuccess | RelayResponseError
 
+export type FlashbotsTransaction = FlashbotsTransactionResponse | RelayResponseError
+
 export interface GetUserStatsResponseSuccess {
   signing_address: string
   blocks_won_total: number
@@ -100,7 +103,7 @@ export interface GetUserStatsResponseSuccess {
 
 export type GetUserStatsResponse = GetUserStatsResponseSuccess | RelayResponseError
 
-type RpcParams = Array<string[] | string | number>
+type RpcParams = Array<string[] | string | number | Record<string, unknown>>
 
 const TIMEOUT_MS = 5 * 60 * 1000
 
@@ -161,10 +164,25 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     signedBundledTransactions: Array<string>,
     targetBlockNumber: number,
     opts?: FlashbotsOptions
-  ): Promise<FlashbotsTransactionResponse> {
-    const params = [signedBundledTransactions, `0x${targetBlockNumber.toString(16)}`, opts?.minTimestamp || 0, opts?.maxTimestamp || 0]
-    const request = JSON.stringify(this.prepareBundleRequest('eth_sendBundle', params))
-    await this.request(request)
+  ): Promise<FlashbotsTransaction> {
+    const params = {
+      txs: signedBundledTransactions,
+      blockNumber: `0x${targetBlockNumber.toString(16)}`,
+      minTimestamp: opts?.minTimestamp,
+      maxTimestamp: opts?.maxTimestamp,
+      revertingTxHashes: opts?.revertingTxHashes
+    }
+
+    const request = JSON.stringify(this.prepareBundleRequest('eth_sendBundle', [params]))
+    const response = await this.request(request)
+    if (response.error !== undefined) {
+      return {
+        error: {
+          message: response.error.message,
+          code: response.error.code
+        }
+      }
+    }
 
     const bundleTransactions = signedBundledTransactions.map((signedTransaction) => {
       const transactionDetails = ethers.utils.parseTransaction(signedTransaction)
@@ -194,7 +212,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     bundledTransactions: Array<FlashbotsBundleTransaction | FlashbotsBundleRawTransaction>,
     targetBlockNumber: number,
     opts?: FlashbotsOptions
-  ): Promise<FlashbotsTransactionResponse> {
+  ): Promise<FlashbotsTransaction> {
     const signedTransactions = await this.signBundle(bundledTransactions)
     return this.sendRawBundle(signedTransactions, targetBlockNumber, opts)
   }
@@ -333,10 +351,9 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       evmBlockStateNumber = stateBlockTag
     }
 
-    const params: RpcParams = [signedBundledTransactions, evmBlockNumber, evmBlockStateNumber]
-    if (blockTimestamp) {
-      params.push(blockTimestamp)
-    }
+    const params: RpcParams = [
+      { txs: signedBundledTransactions, blockNumber: evmBlockNumber, stateBlockNumber: evmBlockStateNumber, timestamp: blockTimestamp }
+    ]
     const request = JSON.stringify(this.prepareBundleRequest('eth_callBundle', params))
     const response = await this.request(request)
     if (response.error !== undefined) {
