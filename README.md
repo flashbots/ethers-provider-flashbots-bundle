@@ -111,3 +111,21 @@ A high-level object which contains metadata available at transaction submission 
 ## How to run demo.ts
 
 Included is a simple demo of how to construct the FlashbotsProvider with auth signer authentication and submit a [non-functional] bundle. This will not yield any mev, but serves as a sample initialization to help integrate into your own functional searcher.
+
+## Flashbots on Goerli
+
+To test Flashbots before going to mainnet, you can use the Goerli Flashbots relay, which works in conjunction with a Flashbots-enabled Goerli validator. Flashbots on Goerli requires two simple changes:
+
+1. Ensure your genericProvider passed in to the FlashbotsBundleProvider constructor is connected to Goerli (gas estimates and nonce requests need to correspond to the correct chain):
+```ts
+import { providers } from 'ethers'
+const provider = providers.getDefaultProvider('goerli')
+```
+
+2. Set the relay endpoint to `https://relay-goerli.flashbots.net/`
+```ts
+const flashbotsProvider = await FlashbotsBundleProvider.create(
+  provider,
+  authSigner,
+  'https://relay-goerli.flashbots.net/')
+```
