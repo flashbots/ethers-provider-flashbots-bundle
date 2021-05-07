@@ -127,5 +127,6 @@ const provider = providers.getDefaultProvider('goerli')
 const flashbotsProvider = await FlashbotsBundleProvider.create(
   provider,
   authSigner,
-  'https://relay-goerli.flashbots.net/')
+  'https://relay-goerli.flashbots.net/',
+  'goerli')
 ```
