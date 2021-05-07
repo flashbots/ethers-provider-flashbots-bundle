@@ -20,11 +20,11 @@
     "eslint": "^7.15.0",
     "eslint-config-prettier": "^8.1.0",
     "eslint-plugin-prettier": "^3.3.1",
-    "ethers": "^5.0.23",
+    "ethers": "^5.1.4",
     "prettier": "^2.2.1"
   },
   "peerDependencies": {
-    "ethers": "^5.0.23"
+    "ethers": "^5.1.4"
   },
   "dependencies": {
     "ts-node": "^9.1.0",
