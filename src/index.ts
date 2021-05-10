@@ -272,13 +272,11 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
         } else {
           const block = await this.genericProvider.getBlock(targetBlockNumber)
           // check bundle against block:
-          const blockTransactionsHash: {[key:string]: boolean} = {};
-          for(const bt of block.transactions){
-            blockTransactionsHash[bt] = true;
+          const blockTransactionsHash: { [key: string]: boolean } = {}
+          for (const bt of block.transactions) {
+            blockTransactionsHash[bt] = true
           }
-          const bundleIncluded = transactionAccountNonces.every(
-            (transaction) => blockTransactionsHash[transaction.hash] === true
-          )
+          const bundleIncluded = transactionAccountNonces.every((transaction) => blockTransactionsHash[transaction.hash] === true)
           resolve(bundleIncluded ? FlashbotsBundleResolution.BundleIncluded : FlashbotsBundleResolution.BlockPassedWithoutInclusion)
         }
 
