@@ -1,6 +1,6 @@
 # ethers-provider-flashbots-bundle
 
-This repository contains the `FlashbotsBundleProvider` ethers.js provider, an additional `Provider` to `ethers.js` to enable high-level access to `eth_sendBundle` and `eth_callBundle` rpc endpoint on [mev-relay](https://github.com/flashbots/mev-relay-js).
+This repository contains the `FlashbotsBundleProvider` ethers.js provider, an additional `Provider` to `ethers.js` to enable high-level access to `eth_sendBundle` and `eth_callBundle` rpc endpoint on [mev-relay](https://github.com/flashbots/mev-relay-js). **`mev-relay` is a hosted service; it is not necessary to run `mev-relay` or `mev-geth` to proceed with this example.** 
 
 Flashbots-enabled relays and miners expose two new jsonrpc endpoints: `eth_sendBundle` and `eth_callBundle`. Since these are non-standard endpoints, ethers.js and other libraries do not natively support these requests (like `getTransactionCount`). In order to interact with these endpoints, you will need access to another full-featured (non-Flashbots) endpoint for nonce-calculation, gas estimation, and transaction status.
 
