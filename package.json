@@ -4,6 +4,10 @@
   "description": "",
   "main": "build/index.js",
   "types": "build/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/flashbots/ethers-provider-flashbots-bundle.git"
+  },
   "scripts": {
     "demo": "npx ts-node --project tsconfig.json src/demo.ts",
     "build": "npx tsc",
