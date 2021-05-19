@@ -1,88 +1,122 @@
 # ethers-provider-flashbots-bundle
 
-Contains the `FlashbotsBundleProvider` ethers.js provider to provide high-level access to `eth_sendBundle` and `eth_callBundle` rpc endpoint on [mev-relay](https://github.com/flashbots/mev-relay-js).
+This repository contains the `FlashbotsBundleProvider` ethers.js provider, an additional `Provider` to `ethers.js` to enable high-level access to `eth_sendBundle` and `eth_callBundle` rpc endpoint on [mev-relay](https://github.com/flashbots/mev-relay-js). **`mev-relay` is a hosted service; it is not necessary to run `mev-relay` or `mev-geth` to proceed with this example.** 
 
-Flashbots-enabled relays and miners expose two new jsonrpc endpoint: `eth_sendBundle` and `eth_callBundle`. Since these are brand-new, non-standard endpoints, ethers.js and other libraries do not natively support these requests (like `getTransactionCount`). In order to interact with these endpoints, you will also need access to another full-featured (non-Flashbots) endpoint for nonce-calculation, gas estimation, and transaction status.
+Flashbots-enabled relays and miners expose two new jsonrpc endpoints: `eth_sendBundle` and `eth_callBundle`. Since these are non-standard endpoints, ethers.js and other libraries do not natively support these requests (like `getTransactionCount`). In order to interact with these endpoints, you will need access to another full-featured (non-Flashbots) endpoint for nonce-calculation, gas estimation, and transaction status.
 
-Flashbots also requires signed payloads. This library takes care of the signing process via the `authSigner` passed into the constructor. [Read more about relay signatures here](https://github.com/flashbots/mev-relay-js#authentication)
+One key feature this library provides is **payload signing**, a requirement to submit Flashbot bundles to the `mev-relay` service. This library takes care of the signing process via the `authSigner` passed into the constructor. [Read more about relay signatures here](https://github.com/flashbots/mev-relay-js#authentication)
 
-
-This library is not a fully functional ethers.js implementation, just a simple provider class, designed to interact with your existing ethers.js v5 module.
-
-You must pass in a generic ethers.js provider to the Flashbots provider in the constructor:
-
-```ts
-const NETWORK_INFO = { chainId: 1, ensAddress: '', name: 'mainnet' }
-// Standard json rpc provider directly from ethers.js
-const provider = new providers.JsonRpcProvider({ url: ETHEREUM_RPC_URL }, NETWORK_INFO)
-// `authSigner` is an Ethereum private key that does NOT store funds and is NOT your bot's primary key.
-// This is an identifying key for signing payloads to establish reputation and whitelisting
-const authSigner = new Wallet('0x0000000000000000000000000000000000000000000000000000000000000000')
-// flashbots provider requires passing in a standard provider
-const flashbotsProvider = await FlashbotsBundleProvider.create(provider, authSigner)
-```
-
-The flashbotsProvider provides the sendBundle function:
-
-```ts
-flashbotsProvider.sendBundle(bundledTransactions: Array<FlashbotsBundleTransaction | FlashbotsBundleRawTransaction>, targetBlockNumber: number)
-    => Promise<FlashbotsTransactionResponse | RelayResponseError>
-```
-
-and simulate function:
-
-```ts
-flashbotsProvider.simulate(
-    signedBundledTransactions: Array<string>,
-    blockTag: BlockTag,
-    stateBlockTag?: BlockTag,
-    blockTimestamp?: number)
-      => Promise<SimulationResponse>
-```
+This library is not a fully functional ethers.js implementation, just a simple provider class, designed to interact with an existing [ethers.js v5 installation](https://github.com/ethers-io/ethers.js/).
 
 ## Example
 
+Install ethers.js and the Flashbots ethers bundle provider
+```bash
+npm install --save ethers
+npm install --save @flashbots/ethers-provider-bundle
+```
+
+Open up a new TypeScript file (this also works with JavaScript if you prefer)
+
 ```ts
-// Using the map below ships two different bundles, targeting the next two blocks
-const blockNumber = await provider.getBlockNumber()
-const minTimestamp = (await provider.getBlock(blockNumber)).timestamp
-const maxTimestamp = minTimestamp + 120
-const bundlePromises = [blockNumber + 1, blockNumber + 2].map((targetBlockNumber) =>
-  flashbotsProvider.sendBundle(
-    [
-      {
-        signedTransaction: SIGNED_ORACLE_UPDATE_FROM_PENDING_POOL // serialized signed transaction hex
-      },
-      {
-        signer: wallet, // ethers signer
-        transaction: transaction // ethers populated transaction object
-      }
-    ],
-    targetBlockNumber, // block number at which this bundle is valid
-    {
-      minTimestamp, // optional minimum timestamp at which this bundle is valid (inclusive)
-      maxTimestamp, // optional maximum timestamp at which this bundle is valid (inclusive)
-      revertingTxHashes: [tx1, tx2] // optional list of transaction hashes allowed to revert. Without specifying here, any revert invalidates the entire bundle.
-    }
-  )
+import { providers, Wallet } from "ethers";
+import { FlashbotsBundleProvider } from "@flashbots/ethers-provider-bundle";
+
+// Standard json rpc provider directly from ethers.js (NOT Flashbots)
+const provider = new providers.JsonRpcProvider({ url: ETHEREUM_RPC_URL }, 1)
+
+// `authSigner` is an Ethereum private key that does NOT store funds and is NOT your bot's primary key.
+// This is an identifying key for signing payloads to establish reputation and whitelisting
+// In production, this should be used across multiple bundles to build relationship. In this example, we generate a new wallet each time
+const authSigner = Wallet.createRandom();
+
+// Flashbots provider requires passing in a standard provider
+const flashbotsProvider = await FlashbotsBundleProvider.create(
+  provider, // a normal ethers.js provider, to perform gas estimiations and nonce lookups
+  authSigner // ethers.js signer wallet, only for signing request payloads, not transactions
 )
 ```
 
-## bundledTransactions
+From here, you have a `flashbotsProvider` object setup which can now perform either an `eth_callBundle` (via `simulate()`) or `eth_sendBundle` (via `sendBundle`). Each of these functions act on an array of `Bundle Transactions`
 
-A Flashbots bundle consists of one or more transactions in strict order to be relayed to the miner directly. While the miner requires signed transactions, `sendBundle()` can receive a mix of pre-signed transaction and `TransactionRequest` + `Signer` (wallet) objects.
+## Bundle Transactions
 
-These bundles can pay the miner either via gas fees _OR_ via `block.coinbase.transfer(minerReward)`.
+Both `simulate` and `sendBundle` operate on a bundle of strictly-ordered transactions. While the miner requires signed transactions, the provider library will accept a mix of pre-signed transaction and `TransactionRequest + Signer` transactions (which it will estimate, nonce-calculate, and sign before sending to the `mev-relay`)
 
-## targetBlockNumber
+```ts
+const wallet = new Wallet(PRIVATE_KEY)
+const transaction = {
+  to: CONTRACT_ADDRESS,
+  data: CALL_DATA
+}
+const transactionBundle = [
+    {
+      signedTransaction: SIGNED_ORACLE_UPDATE_FROM_PENDING_POOL // serialized signed transaction hex
+    },
+    {
+      signer: wallet, // ethers signer
+      transaction: transaction // ethers populated transaction object
+    }
+  ]
+```
 
-The only block number for which the bundle is to be considered valid. If you would like more than one block to be targeted, submit multiple rpc calls targeting each specific block. This value should be higher than the value of getBlockNumber(). Submitting a bundle with a target block number of the current block, or earlier, is a no-op.
+## Block Targeting
+The last thing required for `sendBundle()` is block targeting. Every bundle specifically references a single block. If your bundle is valid for multiple blocks (including all blocks until it is mined), `sendBundle()` must be called for every block, ideally on one of the blocks immediately prior. This gives you a chance to re-evaluate the opportunity you are capturing and re-sign your transactions with a higher nonce, if necessary.
+
+The block should always be a _future_ block, never the current one.
+
+```ts
+const targetBlockNumber = (await provider.getBlockNumber()) + 1
+```
+
+## Simulate and Send
+
+Now that we have:
+1. Flashbots Provider `flashbotsProvider`
+2. Bundle of transactions `transactionBundle`
+3. Block Number `targetBlockNumber`
+
+We can run simulations and submit directly to miners, via the `mev-relay`.
+
+Simulate:
+```ts
+  const signedTransactionBundle = await flashbotsProvider.signBundle(transactionBundle)
+  const simulation = await flashbotsProvider.simulate(signedTransactions, targetBlockNumber)
+  console.log(JSON.stringify(simulation, null, 2))
+```
+
+Send:
+```ts
+const flashbotsTransactionResponse = await flashbotsProvider.sendBundle(
+  transactionBundle,
+  targetBlockNumber,
+  )
+```
+
+## FlashbotsTransactionResponse
+After calling `sendBundle`, this provider will return a Promise of an object with helper functions related to the bundle you submitted.
+
+These functions return metadata available at transaction submission time, as well as the following functions which can wait, track, and simulate the bundle's behavior.
+
+- `bundleTransactions()` - An array of transaction descriptions sent to the relay, including hash, nonce, and the raw transaction.
+- `receipts()` - Returns promise of an array of transaction receipts corresponding to the transaction hashes that were relayed as part of the bundle. Will not wait for block to be mined; could return incomplete information
+- `wait()` - Returns a promise which will wait for target block number to be reached _OR_ one of the transactions to become invalid due to nonce-issues (including, but not limited to, one of the transactions from your bundle being included too early). Returns the wait resolution as a status enum
+- `simulate()` - Returns a promise of the transaction simulation, once the proper block height has been reached. Use this function to troubleshoot failing bundles and verify miner profitability
 
 ## Optional eth_sendBundle arguments
 
+Beyond target block number, an object can be passed in with optional attributes:
+```ts
+{
+  minTimestamp, // optional minimum timestamp at which this bundle is valid (inclusive)
+  maxTimestamp, // optional maximum timestamp at which this bundle is valid (inclusive)
+  revertingTxHashes: [tx1, tx2] // optional list of transaction hashes allowed to revert. Without specifying here, any revert invalidates the entire bundle.
+}
+```
+
 ### minTimestamp / maxTimestamp
 
-While each bundle targets only a single block, you can add an additional filter for validity based on the block's timestamp. This does *not* allow for targeting any block number based on a timestamp or instruct miners on what timestamp to use, it merely serves as a secondary filter. 
+While each bundle targets only a single block, you can add a filter for validity based on the block's timestamp. This does *not* allow for targeting any block number based on a timestamp or instruct miners on what timestamp to use, it merely serves as a secondary filter.
 
 If your bundle is not valid before a certain time or includes an expiring opportunity, setting these values allows the miner to skip bundle processing earlier in the phase.
 
@@ -90,7 +124,7 @@ Additionally, you could target several blocks in the future, but with a strict m
 
 ### Reverting Transaction Hashes
 
-Transaction bundles will not be considered for inclusion if they include *any* transactions in them that revert or fail. While this is normally desirable, there are some advanced use-cases where a searcher might WANT to bring a failing transaction to the chain. This is normally desirable for nonce management. Consider:
+Transaction bundles will not be considered for inclusion if they include *any* transactions that revert or fail. While this is normally desirable, there are some advanced use-cases where a searcher might WANT to bring a failing transaction to the chain. This is normally desirable for nonce management. Consider:
 
 Transaction Nonce #1 = Failed (unrelated) token transfer
 Transaction Nonce #2 = DEX trade
@@ -99,14 +133,18 @@ If a searcher wants to bring #2 to the chain, #1 must be included first, and its
 
 Optional parameter `revertingTxHashes` allows a searcher to specify an array of transactions that can (but are not required to) revert.
 
-## FlashbotsTransactionResponse
+## Paying for your bundle
 
-A high-level object which contains metadata available at transaction submission time, as well as the following functions which can wait, track, and simulate the bundle's behavior.
+In addition to paying for a bundle with gas price, bundles can also conditionally pay a miner via:
+`block.coinbase.transfer(_minerReward)`
+or
+`block.coinbase.call{value: _minerReward}("");`
 
-- bundleTransactions() - An array of transaction descriptions sent to the relay, including hash, nonce, and the raw transaction.
-- receipts() - Returns promise of an array of transaction receipts corresponding to the transaction hashes that were relayed as part of the bundle. Will not wait for block to be mined; could return incomplete information
-- wait() - Returns a promise which will wait for target block number to be reached _OR_ one of the transactions to become invalid due to nonce-issues (including, but not limited to, one of the transactions from your bundle being included too early). Returns the wait resolution as a status enum
-- simulate() - Returns a promise of the transaction simulation, once the proper block height has been reached. Use this function to troubleshoot failing bundles and verify miner profitability
+(assuming _minerReward is a solidity `uint256` with the wei-value to be transferred directly to the miner)
+
+The entire value of the bundle is added up at the end, so not every transaction needs to have a gas price or `block.coinbase` payment, so long as at least one does, and pays enough to support the gas used in non-paying transactions.
+
+Note: Gas-fees will ONLY benefit your bundle if the transaction is not already present in the mempool. When including a pending transaction in your bundle, it is similar to that transaction having a gas price of `0`; other transactions in your bundle will need to pay more for the gas it uses.
 
 ## How to run demo.ts
 
