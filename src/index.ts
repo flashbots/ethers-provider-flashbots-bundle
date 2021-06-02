@@ -175,7 +175,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
 
     const request = JSON.stringify(this.prepareBundleRequest('eth_sendBundle', [params]))
     const response = await this.request(request)
-    if (response.error !== undefined) {
+    if (response.error !== undefined && response.error !== null) {
       return {
         error: {
           message: response.error.message,
@@ -317,7 +317,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     const params = [evmBlockNumber]
     const request = JSON.stringify(this.prepareBundleRequest('flashbots_getUserStats', params))
     const response = await this.request(request)
-    if (response.error !== undefined) {
+    if (response.error !== undefined && response.error !== null) {
       return {
         error: {
           message: response.error.message,
@@ -358,7 +358,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     ]
     const request = JSON.stringify(this.prepareBundleRequest('eth_callBundle', params))
     const response = await this.request(request)
-    if (response.error !== undefined) {
+    if (response.error !== undefined && response.error !== null) {
       return {
         error: {
           message: response.error.message,
