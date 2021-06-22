@@ -346,7 +346,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
 
     let evmBlockStateNumber: string
     if (typeof stateBlockTag === 'number') {
-      evmBlockStateNumber = `0x${blockTag.toString(16)}`
+      evmBlockStateNumber = `0x${stateBlockTag.toString(16)}`
     } else if (!stateBlockTag) {
       evmBlockStateNumber = 'latest'
     } else {
