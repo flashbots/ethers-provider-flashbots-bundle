@@ -238,7 +238,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
           : nonces[address] || BigNumber.from(await this.genericProvider.getTransactionCount(address, 'latest'))
       nonces[address] = nonce.add(1)
       if (transaction.nonce === undefined) transaction.nonce = nonce
-      if (transaction.gasPrice === undefined) transaction.gasPrice = BigNumber.from(0)
+      if ((transaction.type == null || transaction.type == 0) && transaction.gasPrice === undefined) transaction.gasPrice = BigNumber.from(0)
       if (transaction.gasLimit === undefined) transaction.gasLimit = await tx.signer.estimateGas(transaction) // TODO: Add target block number and timestamp when supported by geth
       signedTransactions.push(await tx.signer.signTransaction(transaction))
     }
