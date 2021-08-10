@@ -69,6 +69,25 @@ The block should always be a _future_ block, never the current one.
 const targetBlockNumber = (await provider.getBlockNumber()) + 1
 ```
 
+## Gas Prices and EIP-1559
+Before EIP-1559 was activated, the most common way for searchers to submit transactions is with `gasPrice=0`, with an on-chain payment to `block.coinbase` conditional on the transaction's success. All transactions must pay `baseFee` now, an attribute of a block. For an example of how to ensure you are using this `baseFee`, see `demo.ts` in this repository. 
+
+```
+const block = await provider.getBlock(blockNumber)
+const maxBaseFeeInFutureBlock = FlashbotsBundleProvider.getMaxBaseFeeInFutureBlock(block.baseFeePerGas, BLOCKS_IN_THE_FUTURE)
+const eip1559Transaction = {
+    to: wallet.address,
+    type: 2,
+    maxFeePerGas: PRIORITY_FEE.add(maxBaseFeeInFutureBlock),
+    maxPriorityFeePerGas: PRIORITY_FEE,
+    gasLimit: 21000,
+    data: '0x',
+    chainId: CHAIN_ID
+}
+```
+
+`FlashbotsBundleProvider.getMaxBaseFeeInFutureBlock` calculates the maximum baseFee that is possible `BLOCKS_IN_THE_FUTURE` blocks, given maximum expansion on each block. You won't pay this fee, so long as it is specified as `maxFeePerGas`, you will only pay the block's `baseFee`.
+
 ## Simulate and Send
 
 Now that we have:
@@ -145,6 +164,12 @@ or
 The entire value of the bundle is added up at the end, so not every transaction needs to have a gas price or `block.coinbase` payment, so long as at least one does, and pays enough to support the gas used in non-paying transactions.
 
 Note: Gas-fees will ONLY benefit your bundle if the transaction is not already present in the mempool. When including a pending transaction in your bundle, it is similar to that transaction having a gas price of `0`; other transactions in your bundle will need to pay more for the gas it uses.
+
+## Bundle and User Statistics
+The Flashbots relay can also return statistics about you as a user (identified solely by your signing address) and any bundle previously submitted.
+
+- `getUserStats()` returns aggregate metrics about past performance, including if your signing key is currently eligible for the "high priority" queue. [Read more about searcher reputation here](https://docs.flashbots.net/flashbots-auction/searchers/advanced/reputation)
+- `getBundleStats(bundleHash, targetBlockNumber)` returns data specific to a single bundle submission, including detailed timestamps for the various phases a bundle goes before reaching miners. 
 
 ## How to run demo.ts
 

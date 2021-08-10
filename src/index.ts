@@ -103,6 +103,17 @@ export interface GetUserStatsResponseSuccess {
 
 export type GetUserStatsResponse = GetUserStatsResponseSuccess | RelayResponseError
 
+export interface GetBundleStatsResponseSuccess {
+  isSimulated: boolean
+  isSentToMiners: boolean
+  isHighPriority: boolean
+  simulatedAt: string
+  submittedAt: string
+  sentToMinersAt: string
+}
+
+export type GetBundleStatsResponse = GetBundleStatsResponseSuccess | RelayResponseError
+
 type RpcParams = Array<string[] | string | number | Record<string, unknown>>
 
 const TIMEOUT_MS = 5 * 60 * 1000
@@ -285,7 +296,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
           for (const bt of block.transactions) {
             blockTransactionsHash[bt] = true
           }
-          const bundleIncluded = transactionAccountNonces.every((transaction) => blockTransactionsHash[transaction.hash] === true)
+          const bundleIncluded = transactionAccountNonces.every((transaction) => blockTransactionsHash[transaction.hash])
           resolve(bundleIncluded ? FlashbotsBundleResolution.BundleIncluded : FlashbotsBundleResolution.BlockPassedWithoutInclusion)
         }
 
@@ -325,6 +336,24 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
 
     const params = [evmBlockNumber]
     const request = JSON.stringify(this.prepareBundleRequest('flashbots_getUserStats', params))
+    const response = await this.request(request)
+    if (response.error !== undefined && response.error !== null) {
+      return {
+        error: {
+          message: response.error.message,
+          code: response.error.code
+        }
+      }
+    }
+
+    return response.result
+  }
+
+  public async getBundleStats(bundleHash: string, blockNumber: number): Promise<GetBundleStatsResponse> {
+    const evmBlockNumber = `0x${blockNumber.toString(16)}`
+
+    const params = [{bundleHash, blockNumber: evmBlockNumber}]
+    const request = JSON.stringify(this.prepareBundleRequest('flashbots_getBundleStats', params))
     const response = await this.request(request)
     if (response.error !== undefined && response.error !== null) {
       return {
@@ -399,7 +428,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     return Promise.all(bundledTransactions.map((bundledTransaction) => this.genericProvider.getTransactionReceipt(bundledTransaction.hash)))
   }
 
-  private prepareBundleRequest(method: 'eth_callBundle' | 'eth_sendBundle' | 'flashbots_getUserStats', params: RpcParams) {
+  private prepareBundleRequest(method: 'eth_callBundle' | 'eth_sendBundle' | 'flashbots_getUserStats' | 'flashbots_getBundleStats', params: RpcParams) {
     return {
       method: method,
       params: params,
