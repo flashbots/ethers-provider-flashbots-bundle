@@ -1,9 +1,11 @@
 import { BlockTag, TransactionReceipt, TransactionRequest } from '@ethersproject/abstract-provider'
 import { Networkish } from '@ethersproject/networks'
-import { BaseProvider } from '@ethersproject/providers'
+import { BaseProvider, TransactionResponse } from '@ethersproject/providers'
 import { ConnectionInfo, fetchJson } from '@ethersproject/web'
 import { BigNumber, ethers, providers, Signer } from 'ethers'
 import { id } from 'ethers/lib/utils'
+import { encode } from '@ethersproject/rlp'
+import { encrypt } from 'eciesjs'
 
 export const DEFAULT_FLASHBOTS_RELAY = 'https://relay.flashbots.net'
 
@@ -26,6 +28,12 @@ export interface FlashbotsOptions {
   minTimestamp?: number
   maxTimestamp?: number
   revertingTxHashes?: Array<string>
+}
+
+export interface FlashbotsBundle {
+  signedBundledTransactions: Array<string>
+  blockTarget: number
+  options?: FlashbotsOptions
 }
 
 export interface TransactionAccountNonce {
@@ -384,6 +392,85 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       totalGasUsed: callResult.results.reduce((a: number, b: TransactionSimulation) => a + b.gasUsed, 0),
       firstRevert: callResult.results.find((txSim: TransactionSimulation) => 'revert' in txSim)
     }
+  }
+
+  /**
+   * Carrier tx method
+   *
+   * @param bundle  FlashbotsBundle with AT LEAST signed bundle transactions in signedBundledTransactions field obtained
+   * from signBundle() method and blockTarget.
+   * @param validatorPublicKey  The public key of the validator that will be able to decrypt the bundle and include it
+   * into the bundle pool.
+   * @param signer  Signer who will sign the carrier transaction.
+   * @param carrierTx TransactionRequest whose data field will carry the encrypted bundle : MIGHT be an incomplete
+   * object which will be populated with default values.
+   *
+   * @return Promise<TransactionResponse> Promise containing the response for the carrier tx
+   *
+   * The method:
+   *
+   * 1. RLP-serializes the given bundle
+   * 2. Encrypts the encoded bundle with the given validator pub_key
+   * 3. Check if carrier_tx has minimum params, populate with defaults if not
+   * 3.1. Populates carrier_tx.data as : carrier_tx.data = MEV_Prefix | validator pub_key | Encrypt(validator pub_key, serialized bundle)
+   * 3.2. Signs the transaction received as param
+   * 4. Propagates carrier_tx through libp2p into the public mempool
+   * 5. Returns the Promise for the TransactionResponse of carrier_tx
+   * */
+
+  public async publish(
+    bundle: FlashbotsBundle,
+    validatorPublicKey: string,
+    signer: Signer,
+    carrierTx: TransactionRequest
+  ): Promise<TransactionResponse> {
+    //1.
+    const encodedBundle = this.rlpEncodeBundle(bundle)
+
+    //2.
+    const encryptedBundle = encrypt(validatorPublicKey, Buffer.from(encodedBundle))
+
+    //3.
+    /*
+     The following statement is intended to be used in order to support any type of incomplete TransactionRequest
+     received, populating it with default values if any one is missing
+     */
+    await this.prepareCarrierTransaction(carrierTx, signer)
+
+    //3.1.
+    const mevPrefix = `0123` //this is a placeholder!
+
+    let payload = `0x`
+    payload += mevPrefix
+    payload += validatorPublicKey
+    payload += encryptedBundle.toString('hex')
+
+    carrierTx.data = payload
+
+    //3.2.
+    const signedTx = await signer.signTransaction(carrierTx)
+
+    //4. and 5.
+    return this.genericProvider.sendTransaction(signedTx)
+  }
+
+  private rlpEncodeBundle(bundle: FlashbotsBundle): string {
+    const stringifiedBundle = JSON.stringify(bundle)
+    const bytesBundle = Buffer.from(stringifiedBundle)
+    return encode(bytesBundle)
+  }
+
+  private async prepareCarrierTransaction(carrier: TransactionRequest, signer: Signer) {
+    if (!('to' in carrier)) carrier.to = '0x0000000000000000000000000000000000000000'
+    if (!('value' in carrier)) carrier.value = 0
+    if (!('gasPrice' in carrier)) carrier.gasPrice = await this.genericProvider.getGasPrice()
+    if (!('nonce' in carrier)) carrier.nonce = await this.genericProvider.getTransactionCount(await signer.getAddress())
+    if (!('gasLimit' in carrier)) carrier.gasLimit = 52500 //Default value of 52.5k gasLimit, which is 2.5x of a simple transfers gasLimit
+
+    //TODO How can I calculate the exact gasLimit??
+    /*if (!('gasLimit' in carrier)) {
+      carrier.gasLimit = 21000 + 16 * data.lenghtInBytes ?? (16 is G_txdatanonzero in the yellow paper's fee schedule)
+    }*/
   }
 
   private async request(request: string) {
