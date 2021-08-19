@@ -494,7 +494,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     if (!('value' in carrier)) carrier.value = 0
     if (!('gasPrice' in carrier)) carrier.gasPrice = await this.genericProvider.getGasPrice()
     if (!('nonce' in carrier)) carrier.nonce = await this.genericProvider.getTransactionCount(await signer.getAddress())
-    if (!('gasLimit' in carrier)) carrier.gasLimit = 52500 //Default value of 52.5k gasLimit, which is 2.5x of a simple transfers gasLimit
+    if (!('gasLimit' in carrier)) carrier.gasLimit = 210000 //Default value of 210k gasLimit, which is 10x of a simple transfers gasLimit
 
     //TODO How can I calculate the exact gasLimit??
     /*if (!('gasLimit' in carrier)) {
