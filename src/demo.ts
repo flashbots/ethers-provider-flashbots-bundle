@@ -5,8 +5,8 @@ import { TransactionRequest } from '@ethersproject/abstract-provider'
 const FLASHBOTS_AUTH_KEY = process.env.FLASHBOTS_AUTH_KEY
 
 const GWEI = BigNumber.from(10).pow(9)
-const PRIORITY_FEE = GWEI.mul(6)
-const LEGACY_GAS_PRICE = GWEI.mul(8)
+const PRIORITY_FEE = GWEI.mul(3)
+const LEGACY_GAS_PRICE = GWEI.mul(12)
 const BLOCKS_IN_THE_FUTURE = 2
 
 // ===== Uncomment this for mainnet =======
@@ -69,8 +69,8 @@ async function main() {
         transaction: eip1559Transaction
       }
     ])
-    const simulation = await flashbotsProvider.simulate(signedTransactions, blockNumber + BLOCKS_IN_THE_FUTURE)
-
+    const targetBlock = blockNumber + BLOCKS_IN_THE_FUTURE;
+    const simulation = await flashbotsProvider.simulate(signedTransactions, targetBlock)
     // Using TypeScript discrimination
     if ('error' in simulation) {
       console.warn(`Simulation Error: ${simulation.error.message}`)
@@ -78,7 +78,7 @@ async function main() {
     } else {
       console.log(`Simulation Success: ${JSON.stringify(simulation, null, 2)}`)
     }
-    const bundleSubmission = await flashbotsProvider.sendRawBundle(signedTransactions, blockNumber + BLOCKS_IN_THE_FUTURE)
+    const bundleSubmission = await flashbotsProvider.sendRawBundle(signedTransactions, targetBlock)
     console.log('bundle submitted, waiting')
     if ('error' in bundleSubmission) {
       throw new Error(bundleSubmission.error.message)
@@ -87,6 +87,11 @@ async function main() {
     console.log(`Wait Response: ${FlashbotsBundleResolution[waitResponse]}`)
     if (waitResponse === FlashbotsBundleResolution.BundleIncluded || waitResponse === FlashbotsBundleResolution.AccountNonceTooHigh) {
       process.exit(0)
+    } else {
+      console.log({
+        bundleStats: await flashbotsProvider.getBundleStats(simulation.bundleHash, targetBlock),
+        userStats: await flashbotsProvider.getUserStats(),
+      })
     }
   })
 }
