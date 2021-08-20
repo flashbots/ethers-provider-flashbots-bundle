@@ -30,6 +30,15 @@ export interface FlashbotsOptions {
   revertingTxHashes?: Array<string>
 }
 
+/**
+ * This type was added by Lucas, in order to package all the information needed in a submittable bundle, as the
+ * {@link FlashbotsBundleProvider.publish} method
+ *
+ * It's fields are described as:
+ * signedBundledTransactions: an array of signed transaction that compose the bundle the user intends to submit
+ * blockTarget: the block number within which the bundle is valid and includable in a block
+ * options: an instance of FlashbotsOptions, used to specify extra information about the bundle's validity
+ */
 export interface FlashbotsBundle {
   signedBundledTransactions: Array<string>
   blockTarget: number
@@ -424,27 +433,17 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   }
 
   /**
-   * Carrier tx method
+   * Method to send a carrier tx into the public mempool
    *
-   * @param bundle  FlashbotsBundle with AT LEAST signed bundle transactions in signedBundledTransactions field obtained
-   * from signBundle() method and blockTarget.
+   * @param bundle  FlashbotsBundle with AT LEAST signed bundled transactions in signedBundledTransactions field obtained
+   *  from {@link signBundle} method, and blockTarget.
    * @param validatorPublicKey  The public key of the validator that will be able to decrypt the bundle and include it
-   * into the bundle pool.
+   *  into the bundle pool.
    * @param signer  Signer who will sign the carrier transaction.
-   * @param carrierTx TransactionRequest whose data field will carry the encrypted bundle : MIGHT be an incomplete
-   * object which will be populated with default values.
+   * @param carrierTx TransactionRequest whose data field will carry the encrypted bundle : MAY be an incomplete
+   *  object which will be populated with default values.
    *
    * @return Promise<TransactionResponse> Promise containing the response for the carrier tx
-   *
-   * The method:
-   *
-   * 1. RLP-serializes the given bundle
-   * 2. Encrypts the encoded bundle with the given validator pub_key
-   * 3. Check if carrier_tx has minimum params, populate with defaults if not
-   * 3.1. Populates carrier_tx.data as : carrier_tx.data = MEV_Prefix | validator pub_key | Encrypt(validator pub_key, serialized bundle)
-   * 3.2. Signs the transaction received as param
-   * 4. Propagates carrier_tx through libp2p into the public mempool
-   * 5. Returns the Promise for the TransactionResponse of carrier_tx
    * */
 
   public async publish(
@@ -453,20 +452,20 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     signer: Signer,
     carrierTx: TransactionRequest
   ): Promise<TransactionResponse> {
-    //1.
-    const encodedBundle = this.rlpEncodeBundle(bundle)
+    //RLP-serialize the given bundle
+    const serializedBundle = this.rlpSerializeBundle(bundle)
 
-    //2.
-    const encryptedBundle = encrypt(validatorPublicKey, Buffer.from(encodedBundle))
+    //Encrypt the encoded bundle with the passed validator pub_key
+    const encryptedBundle = encrypt(validatorPublicKey, Buffer.from(serializedBundle))
 
-    //3.
+    //Check if carrier_tx has minimum params, populate with defaults if not
     /*
      The following statement is intended to be used in order to support any type of incomplete TransactionRequest
      received, populating it with default values if any one is missing
      */
     await this.prepareCarrierTransaction(carrierTx, signer)
 
-    //3.1.
+    //Populate carrier_tx.data as : carrier_tx.data = MEV_Prefix | validator pub_key | Encrypt(validator pub_key, serialized bundle)
     const mevPrefix = `0123` //this is a placeholder!
 
     let payload = `0x`
@@ -476,19 +475,31 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
 
     carrierTx.data = payload
 
-    //3.2.
+    //Sign the transaction received as param with passed signer
     const signedTx = await signer.signTransaction(carrierTx)
 
-    //4. and 5.
+    //Propagate carrier_tx into the public mempool and return Promise<TransactionResponse> for the carrier_tx
     return this.genericProvider.sendTransaction(signedTx)
   }
 
-  private rlpEncodeBundle(bundle: FlashbotsBundle): string {
+  /**
+   * A private method to encode a FlashbotsBundle following the RLP serialization standard
+   * @param bundle the FlashbotsBundle instance to be serialized
+   * @return string the rlp encoded bundle
+   * @private
+   */
+  private rlpSerializeBundle(bundle: FlashbotsBundle): string {
     const stringifiedBundle = JSON.stringify(bundle)
     const bytesBundle = Buffer.from(stringifiedBundle)
     return encode(bytesBundle)
   }
 
+  /**
+   * A private method to populate {@param carrier}'s missing fields with default values
+   * @param carrier an instance of TransactionRequest which will be the tx containing the full payload in its data field
+   * @param signer an instance of Signer, which is used to retrieve the correct nonce for the carrier tx, should it be missing
+   * @private
+   */
   private async prepareCarrierTransaction(carrier: TransactionRequest, signer: Signer) {
     if (!('to' in carrier)) carrier.to = '0x0000000000000000000000000000000000000000'
     if (!('value' in carrier)) carrier.value = 0
@@ -496,7 +507,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     if (!('nonce' in carrier)) carrier.nonce = await this.genericProvider.getTransactionCount(await signer.getAddress())
     if (!('gasLimit' in carrier)) carrier.gasLimit = 210000 //Default value of 210k gasLimit, which is 10x of a simple transfers gasLimit
 
-    //TODO How can I calculate the exact gasLimit??
+    //TODO How can I calculate the exact gasLimit?? --> Found different resource that said that G_txdatanonzero is either 16 or 68
     /*if (!('gasLimit' in carrier)) {
       carrier.gasLimit = 21000 + 16 * data.lenghtInBytes ?? (16 is G_txdatanonzero in the yellow paper's fee schedule)
     }*/
