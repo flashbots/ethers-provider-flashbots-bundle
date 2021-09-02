@@ -32,7 +32,7 @@ export interface FlashbotsOptions {
 
 /**
  * This type was added by Lucas, in order to package all the information needed in a submittable bundle, as the
- * {@link FlashbotsBundleProvider.publish} method
+ * {@link FlashbotsBundleProvider.sendCarrierTransaction} method
  *
  * It's fields are described as:
  * signedBundledTransactions: an array of signed transaction that compose the bundle the user intends to submit
@@ -435,8 +435,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   /**
    * Method to send a carrier tx into the public mempool
    *
-   * @param bundle  FlashbotsBundle with AT LEAST signed bundled transactions in signedBundledTransactions field obtained
-   *  from {@link signBundle} method, and blockTarget.
+   * @param bundle  An array of signed transactions, as returned by the {@link signBundle} method
    * @param validatorPublicKey  The public key of the validator that will be able to decrypt the bundle and include it
    *  into the bundle pool.
    * @param signer  Signer who will sign the carrier transaction.
@@ -446,7 +445,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
    * @return Promise<TransactionResponse> Promise containing the response for the carrier tx
    * */
 
-  public async publish(
+  public async sendCarrierTransaction(
     bundle: FlashbotsBundle,
     validatorPublicKey: string,
     signer: Signer,
@@ -458,13 +457,6 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     //Encrypt the encoded bundle with the passed validator pub_key
     const encryptedBundle = encrypt(validatorPublicKey, Buffer.from(serializedBundle))
 
-    //Check if carrier_tx has minimum params, populate with defaults if not
-    /*
-     The following statement is intended to be used in order to support any type of incomplete TransactionRequest
-     received, populating it with default values if any one is missing
-     */
-    await this.prepareCarrierTransaction(carrierTx, signer)
-
     //Populate carrier_tx.data as : carrier_tx.data = MEV_Prefix | validator pub_key | Encrypt(validator pub_key, serialized bundle)
     const mevPrefix = `0123` //this is a placeholder!
 
@@ -474,6 +466,13 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     payload += encryptedBundle.toString('hex')
 
     carrierTx.data = payload
+
+    //Check if carrier_tx has minimum params, populate with defaults if not
+    /*
+     The following statement is intended to be used in order to support any type of incomplete TransactionRequest
+     received, populating it with default values if any one is missing
+     */
+    await this.populateCarrierTransaction(carrierTx)
 
     //Sign the transaction received as param with passed signer
     const signedTx = await signer.signTransaction(carrierTx)
@@ -489,28 +488,34 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
    * @private
    */
   private rlpSerializeBundle(bundle: FlashbotsBundle): string {
-    const stringifiedBundle = JSON.stringify(bundle)
-    const bytesBundle = Buffer.from(stringifiedBundle)
-    return encode(bytesBundle)
+    if (bundle.signedBundledTransactions === undefined) throw Error('Bundle has no transactions')
+    if (bundle.options === undefined) bundle.options = {}
+
+    const fields = [
+      bundle.signedBundledTransactions,
+      this.formatNumber(bundle.blockTarget || 0),
+      this.formatNumber(bundle.options.minTimestamp || 0),
+      this.formatNumber(bundle.options.maxTimestamp || 0),
+      bundle.options.revertingTxHashes || []
+    ]
+    return encode(fields)
+  }
+
+  private formatNumber(num: number): string {
+    const hexNum = num.toString(16)
+    return hexNum.length % 2 === 0 ? `0x${hexNum}` : `0x0${hexNum}`
   }
 
   /**
    * A private method to populate {@param carrier}'s missing fields with default values
    * @param carrier an instance of TransactionRequest which will be the tx containing the full payload in its data field
-   * @param signer an instance of Signer, which is used to retrieve the correct nonce for the carrier tx, should it be missing
    * @private
    */
-  private async prepareCarrierTransaction(carrier: TransactionRequest, signer: Signer) {
-    if (!('to' in carrier)) carrier.to = '0x0000000000000000000000000000000000000000'
+  private async populateCarrierTransaction(carrier: TransactionRequest) {
+    if (!('to' in carrier)) throw Error('carrier.to field is missing')
     if (!('value' in carrier)) carrier.value = 0
     if (!('gasPrice' in carrier)) carrier.gasPrice = await this.genericProvider.getGasPrice()
-    if (!('nonce' in carrier)) carrier.nonce = await this.genericProvider.getTransactionCount(await signer.getAddress())
-    if (!('gasLimit' in carrier)) carrier.gasLimit = 210000 //Default value of 210k gasLimit, which is 10x of a simple transfers gasLimit
-
-    //TODO How can I calculate the exact gasLimit?? --> Found different resource that said that G_txdatanonzero is either 16 or 68
-    /*if (!('gasLimit' in carrier)) {
-      carrier.gasLimit = 21000 + 16 * data.lenghtInBytes ?? (16 is G_txdatanonzero in the yellow paper's fee schedule)
-    }*/
+    if (!('gasLimit' in carrier)) carrier.gasLimit = await this.genericProvider.estimateGas(carrier)
   }
 
   private async request(request: string) {
