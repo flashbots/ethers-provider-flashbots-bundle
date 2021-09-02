@@ -435,7 +435,8 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   /**
    * Method to send a carrier tx into the public mempool
    *
-   * @param bundle  An array of signed transactions, as returned by the {@link signBundle} method
+   * @param bundle  FlashbotsBundle with AT LEAST signed bundled transactions in signedBundledTransactions field obtained
+   *  from {@link signBundle} method, and blockTarget.
    * @param validatorPublicKey  The public key of the validator that will be able to decrypt the bundle and include it
    *  into the bundle pool.
    * @param signer  Signer who will sign the carrier transaction.
