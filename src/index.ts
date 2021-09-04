@@ -480,7 +480,8 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
    * @private
    */
   private rlpSerializeBundle(bundle: FlashbotsBundle): string {
-    if (bundle.signedBundledTransactions === undefined) throw Error('Bundle has no transactions')
+    if (bundle.signedBundledTransactions === undefined || bundle.signedBundledTransactions.length === 0)
+      throw Error('Bundle has no transactions')
     if (bundle.options === undefined) bundle.options = {}
 
     const fields = [
