@@ -30,15 +30,6 @@ export interface FlashbotsOptions {
   revertingTxHashes?: Array<string>
 }
 
-/**
- * This type was added by Lucas, in order to package all the information needed in a submittable bundle, as the
- * {@link FlashbotsBundleProvider.sendCarrierTransaction} method
- *
- * It's fields are described as:
- * signedBundledTransactions: an array of signed transaction that compose the bundle the user intends to submit
- * blockTarget: the block number within which the bundle is valid and includable in a block
- * options: an instance of FlashbotsOptions, used to specify extra information about the bundle's validity
- */
 export interface FlashbotsBundle {
   signedBundledTransactions: Array<string>
   blockTarget: number
@@ -510,6 +501,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   /**
    * A private method to populate {@param carrier}'s missing fields with default values
    * @param carrier an instance of TransactionRequest which will be the tx containing the full payload in its data field
+   * @param signer the signer Object which will send the carrier tx
    * @private
    */
   private async populateCarrierTransaction(carrier: TransactionRequest, signer: Signer) {
