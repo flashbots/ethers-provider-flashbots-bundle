@@ -369,7 +369,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   public async getBundleStats(bundleHash: string, blockNumber: number): Promise<GetBundleStatsResponse> {
     const evmBlockNumber = `0x${blockNumber.toString(16)}`
 
-    const params = [{bundleHash, blockNumber: evmBlockNumber}]
+    const params = [{ bundleHash, blockNumber: evmBlockNumber }]
     const request = JSON.stringify(this.prepareBundleRequest('flashbots_getBundleStats', params))
     const response = await this.request(request)
     if (response.error !== undefined && response.error !== null) {
@@ -473,7 +473,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
      The following statement is intended to be used in order to support any type of incomplete TransactionRequest
      received, populating it with default values if any one is missing
      */
-    await this.populateCarrierTransaction(carrierTx)
+    await this.populateCarrierTransaction(carrierTx, signer)
 
     //Sign the transaction received as param with passed signer
     const signedTx = await signer.signTransaction(carrierTx)
@@ -512,11 +512,28 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
    * @param carrier an instance of TransactionRequest which will be the tx containing the full payload in its data field
    * @private
    */
-  private async populateCarrierTransaction(carrier: TransactionRequest) {
+  private async populateCarrierTransaction(carrier: TransactionRequest, signer: Signer) {
     if (!('to' in carrier)) throw Error('carrier.to field is missing')
-    if (!('value' in carrier)) carrier.value = 0
-    if (!('gasPrice' in carrier)) carrier.gasPrice = await this.genericProvider.getGasPrice()
-    if (!('gasLimit' in carrier)) carrier.gasLimit = await this.genericProvider.estimateGas(carrier)
+
+    if (carrier.gasPrice != null) {
+      const gasPrice = BigNumber.from(carrier.gasPrice)
+      const maxFeePerGas = BigNumber.from(carrier.maxFeePerGas || 0)
+      if (!gasPrice.eq(maxFeePerGas)) {
+        throw Error('carrier tx EIP-1559 mismatch: gasPrice != maxFeePerGas')
+      }
+    }
+    const latestBlock = await this.genericProvider.getBlock('latest')
+    const blocksInFuture = 5
+    const maxBaseFeeInFuture = FlashbotsBundleProvider.getMaxBaseFeeInFutureBlock(<BigNumber>latestBlock.baseFeePerGas, blocksInFuture)
+
+    carrier.type = 2
+    carrier.chainId = carrier.chainId || 1
+    carrier.nonce = carrier.nonce || (await this.genericProvider.getTransactionCount(signer.getAddress()))
+    carrier.maxPriorityFeePerGas = carrier.maxPriorityFeePerGas || ethers.utils.parseUnits('1.5', 'gwei')
+    carrier.maxFeePerGas = carrier.maxFeePerGas || maxBaseFeeInFuture.add(carrier.maxPriorityFeePerGas)
+    carrier.gasLimit = carrier.gasLimit || (await this.genericProvider.estimateGas(carrier))
+    carrier.value = carrier.value || 0
+    carrier.accessList = carrier.accessList || []
   }
 
   private async request(request: string) {
@@ -532,7 +549,10 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     return Promise.all(bundledTransactions.map((bundledTransaction) => this.genericProvider.getTransactionReceipt(bundledTransaction.hash)))
   }
 
-  private prepareBundleRequest(method: 'eth_callBundle' | 'eth_sendBundle' | 'flashbots_getUserStats' | 'flashbots_getBundleStats', params: RpcParams) {
+  private prepareBundleRequest(
+    method: 'eth_callBundle' | 'eth_sendBundle' | 'flashbots_getUserStats' | 'flashbots_getBundleStats',
+    params: RpcParams
+  ) {
     return {
       method: method,
       params: params,
