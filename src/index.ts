@@ -271,9 +271,9 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       let done = false
 
       const minimumNonceByAccount = transactionAccountNonces.reduce((acc, accountNonce) => {
-        if(accountNonce.nonce > 0){
-          if(!acc[accountNonce.account] || accountNonce.nonce < acc[accountNonce.account]){
-            acc[accountNonce.account] = accountNonce.nonce;
+        if (accountNonce.nonce > 0) {
+          if (!acc[accountNonce.account] || accountNonce.nonce < acc[accountNonce.account]) {
+            acc[accountNonce.account] = accountNonce.nonce
           }
         }
         return acc
@@ -354,7 +354,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   public async getBundleStats(bundleHash: string, blockNumber: number): Promise<GetBundleStatsResponse> {
     const evmBlockNumber = `0x${blockNumber.toString(16)}`
 
-    const params = [{bundleHash, blockNumber: evmBlockNumber}]
+    const params = [{ bundleHash, blockNumber: evmBlockNumber }]
     const request = JSON.stringify(this.prepareBundleRequest('flashbots_getBundleStats', params))
     const response = await this.request(request)
     if (response.error !== undefined && response.error !== null) {
@@ -430,7 +430,10 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     return Promise.all(bundledTransactions.map((bundledTransaction) => this.genericProvider.getTransactionReceipt(bundledTransaction.hash)))
   }
 
-  private prepareBundleRequest(method: 'eth_callBundle' | 'eth_sendBundle' | 'flashbots_getUserStats' | 'flashbots_getBundleStats', params: RpcParams) {
+  private prepareBundleRequest(
+    method: 'eth_callBundle' | 'eth_sendBundle' | 'flashbots_getUserStats' | 'flashbots_getBundleStats',
+    params: RpcParams
+  ) {
     return {
       method: method,
       params: params,
