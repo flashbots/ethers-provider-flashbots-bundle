@@ -69,7 +69,7 @@ async function main() {
         transaction: eip1559Transaction
       }
     ])
-    const targetBlock = blockNumber + BLOCKS_IN_THE_FUTURE;
+    const targetBlock = blockNumber + BLOCKS_IN_THE_FUTURE
     const simulation = await flashbotsProvider.simulate(signedTransactions, targetBlock)
     // Using TypeScript discrimination
     if ('error' in simulation) {
@@ -90,7 +90,7 @@ async function main() {
     } else {
       console.log({
         bundleStats: await flashbotsProvider.getBundleStats(simulation.bundleHash, targetBlock),
-        userStats: await flashbotsProvider.getUserStats(),
+        userStats: await flashbotsProvider.getUserStats()
       })
     }
   })
