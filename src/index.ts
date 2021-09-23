@@ -271,12 +271,14 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       let done = false
 
       const minimumNonceByAccount = transactionAccountNonces.reduce((acc, accountNonce) => {
-        if (accountNonce.nonce > 0 && (accountNonce.nonce || 0) < acc[accountNonce.account]) {
-          acc[accountNonce.account] = accountNonce.nonce
+        if(accountNonce.nonce > 0){
+          if(!acc[accountNonce.account] || accountNonce.nonce < acc[accountNonce.account]){
+            acc[accountNonce.account] = accountNonce.nonce;
+          }
         }
-        acc[accountNonce.account] = accountNonce.nonce
         return acc
       }, {} as { [account: string]: number })
+
       const handler = async (blockNumber: number) => {
         if (blockNumber < targetBlockNumber) {
           const noncesValid = await Promise.all(
