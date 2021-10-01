@@ -88,9 +88,12 @@ const eip1559Transaction = {
 
 `FlashbotsBundleProvider.getMaxBaseFeeInFutureBlock` calculates the maximum baseFee that is possible `BLOCKS_IN_THE_FUTURE` blocks, given maximum expansion on each block. You won't pay this fee, so long as it is specified as `maxFeePerGas`, you will only pay the block's `baseFee`.
 
+Additionally if you have the `baseFeePerGas`, `gasUsed`, and `gasLimit` from the current block and are only targeting one block in the future you can get the exact base fee for the next block using `FlashbotsBundleProvider.getBaseFeeInNextBlock`. This method implements the math based on the [EIP1559 definition](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1559.md)
+
 ## Simulate and Send
 
 Now that we have:
+
 1. Flashbots Provider `flashbotsProvider`
 2. Bundle of transactions `transactionBundle`
 3. Block Number `targetBlockNumber`
