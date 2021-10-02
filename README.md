@@ -99,7 +99,7 @@ We can run simulations and submit directly to miners, via the `mev-relay`.
 
 Simulate:
 ```ts
-  const signedTransactionBundle = await flashbotsProvider.signBundle(transactionBundle)
+  const signedTransactions = await flashbotsProvider.signBundle(transactionBundle)
   const simulation = await flashbotsProvider.simulate(signedTransactions, targetBlockNumber)
   console.log(JSON.stringify(simulation, null, 2))
 ```
@@ -169,7 +169,11 @@ Note: Gas-fees will ONLY benefit your bundle if the transaction is not already p
 The Flashbots relay can also return statistics about you as a user (identified solely by your signing address) and any bundle previously submitted.
 
 - `getUserStats()` returns aggregate metrics about past performance, including if your signing key is currently eligible for the "high priority" queue. [Read more about searcher reputation here](https://docs.flashbots.net/flashbots-auction/searchers/advanced/reputation)
-- `getBundleStats(bundleHash, targetBlockNumber)` returns data specific to a single bundle submission, including detailed timestamps for the various phases a bundle goes before reaching miners. 
+- `getBundleStats(bundleHash, targetBlockNumber)` returns data specific to a single bundle submission, including detailed timestamps for the various phases a bundle goes before reaching miners. You can get the bundleHash from the simulation:
+  ```js
+  const simulation = await flashbotsProvider.simulate(signedTransactions, targetBlockNumber)
+  console.log(simulation.bundleHash)
+  ```
 
 ## How to run demo.ts
 
