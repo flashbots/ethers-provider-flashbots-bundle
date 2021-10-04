@@ -3,7 +3,7 @@ import { Networkish } from '@ethersproject/networks'
 import { BaseProvider } from '@ethersproject/providers'
 import { ConnectionInfo, fetchJson } from '@ethersproject/web'
 import { BigNumber, ethers, providers, Signer } from 'ethers'
-import { id } from 'ethers/lib/utils'
+import { id, keccak256 } from 'ethers/lib/utils'
 
 export const DEFAULT_FLASHBOTS_RELAY = 'https://relay.flashbots.net'
 export const BASE_FEE_MAX_CHANGE_DENOMINATOR = 8
@@ -197,6 +197,11 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
 
       return currentBaseFeePerGas.sub(baseFeePerGasDelta)
     }
+  }
+
+  static generateBundleHash(txHashes: Array<string>): string {
+    const concatenatedHashes = txHashes.map((txHash) => txHash.slice(2)).join('')
+    return keccak256(`0x${concatenatedHashes}`)
   }
 
   public async sendRawBundle(
