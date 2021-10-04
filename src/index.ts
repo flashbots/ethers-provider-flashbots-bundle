@@ -6,6 +6,7 @@ import { BigNumber, ethers, providers, Signer } from 'ethers'
 import { id } from 'ethers/lib/utils'
 
 export const DEFAULT_FLASHBOTS_RELAY = 'https://relay.flashbots.net'
+export const BASE_FEE_MAX_CHANGE_DENOMINATOR = 8
 
 export enum FlashbotsBundleResolution {
   BundleIncluded,
@@ -177,6 +178,24 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       maxBaseFee = maxBaseFee.mul(1125).div(1000).add(1)
     }
     return maxBaseFee
+  }
+
+  static getBaseFeeInNextBlock(currentBaseFeePerGas: BigNumber, currentGasUsed: BigNumber, currentGasLimit: BigNumber): BigNumber {
+    const currentGasTarget = currentGasLimit.div(2)
+
+    if (currentGasUsed.eq(currentGasTarget)) {
+      return currentBaseFeePerGas
+    } else if (currentGasUsed.gt(currentGasTarget)) {
+      const gasUsedDelta = currentGasUsed.sub(currentGasTarget)
+      const baseFeePerGasDelta = currentBaseFeePerGas.mul(gasUsedDelta).div(currentGasTarget).div(BASE_FEE_MAX_CHANGE_DENOMINATOR)
+
+      return currentBaseFeePerGas.add(baseFeePerGasDelta)
+    } else {
+      const gasUsedDelta = currentGasTarget.sub(currentGasUsed)
+      const baseFeePerGasDelta = currentBaseFeePerGas.mul(gasUsedDelta).div(currentGasTarget).div(BASE_FEE_MAX_CHANGE_DENOMINATOR)
+
+      return currentBaseFeePerGas.sub(baseFeePerGasDelta)
+    }
   }
 
   public async sendRawBundle(
