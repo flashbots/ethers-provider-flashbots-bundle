@@ -41,6 +41,7 @@ export interface FlashbotsTransactionResponse {
   wait: () => Promise<FlashbotsBundleResolution>
   simulate: () => Promise<SimulationResponse>
   receipts: () => Promise<Array<TransactionReceipt>>
+  bundleHash: string
 }
 
 export interface TransactionSimulationBase {
@@ -242,7 +243,8 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
           undefined,
           opts?.minTimestamp
         ),
-      receipts: () => this.fetchReceipts(bundleTransactions)
+      receipts: () => this.fetchReceipts(bundleTransactions),
+      bundleHash: response.result.bundlehash
     }
   }
 
