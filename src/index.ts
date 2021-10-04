@@ -40,6 +40,7 @@ export interface FlashbotsTransactionResponse {
   wait: () => Promise<FlashbotsBundleResolution>
   simulate: () => Promise<SimulationResponse>
   receipts: () => Promise<Array<TransactionReceipt>>
+  bundleHash: string
 }
 
 export interface TransactionSimulationBase {
