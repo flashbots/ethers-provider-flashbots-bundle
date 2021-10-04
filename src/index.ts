@@ -223,7 +223,8 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
           undefined,
           opts?.minTimestamp
         ),
-      receipts: () => this.fetchReceipts(bundleTransactions)
+      receipts: () => this.fetchReceipts(bundleTransactions),
+      bundleHash: response.result.bundlehash
     }
   }
 
