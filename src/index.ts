@@ -14,6 +14,15 @@ export enum FlashbotsBundleResolution {
   AccountNonceTooHigh
 }
 
+export enum FlashbotsBundleConflictType {
+  NoConflict,
+  NonceCollision,
+  Error,
+  CoinbasePayment,
+  GasUsed,
+  NoBundlesInBlock
+}
+
 export interface FlashbotsBundleRawTransaction {
   signedTransaction: string
 }
@@ -47,10 +56,15 @@ export interface FlashbotsTransactionResponse {
 export interface TransactionSimulationBase {
   txHash: string
   gasUsed: number
+  gasFees: string
+  gasPrice: string
+  toAddress: string
+  fromAddress: string
 }
 
 export interface TransactionSimulationSuccess extends TransactionSimulationBase {
   value: string
+  ethSentToCoinbase: string
 }
 
 export interface TransactionSimulationRevert extends TransactionSimulationBase {
@@ -115,6 +129,35 @@ export interface GetBundleStatsResponseSuccess {
 }
 
 export type GetBundleStatsResponse = GetBundleStatsResponseSuccess | RelayResponseError
+
+interface BlocksApiResponseTransactionDetails {
+  transaction_hash: string
+  tx_index: number
+  bundle_type: 'rogue' | 'flashbots'
+  bundle_index: number
+  block_number: number
+  eoa_address: string
+  to_address: string
+  gas_used: number
+  gas_price: string
+  coinbase_transfer: string
+  total_miner_reward: string
+}
+
+interface BlocksApiResponseBlockDetails {
+  block_number: number
+  miner_reward: string
+  miner: string
+  coinbase_transfers: string
+  gas_used: number
+  gas_price: string
+  transactions: Array<BlocksApiResponseTransactionDetails>
+}
+
+export interface BlocksApiResponse {
+  latest_block_number: number
+  blocks: Array<BlocksApiResponseBlockDetails>
+}
 
 type RpcParams = Array<string[] | string | number | Record<string, unknown>>
 
@@ -420,7 +463,12 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     }
 
     const params: RpcParams = [
-      { txs: signedBundledTransactions, blockNumber: evmBlockNumber, stateBlockNumber: evmBlockStateNumber, timestamp: blockTimestamp }
+      {
+        txs: signedBundledTransactions,
+        blockNumber: evmBlockNumber,
+        stateBlockNumber: evmBlockStateNumber,
+        timestamp: blockTimestamp
+      }
     ]
     const request = JSON.stringify(this.prepareBundleRequest('eth_callBundle', params))
     const response = await this.request(request)
@@ -439,8 +487,116 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       coinbaseDiff: BigNumber.from(callResult.coinbaseDiff),
       results: callResult.results,
       totalGasUsed: callResult.results.reduce((a: number, b: TransactionSimulation) => a + b.gasUsed, 0),
-      firstRevert: callResult.results.find((txSim: TransactionSimulation) => 'revert' in txSim)
+      firstRevert: callResult.results.find((txSim: TransactionSimulation) => 'revert' in txSim || 'error' in txSim)
     }
+  }
+
+  private calculateBundlePricing(bundleTransactions: Array<BlocksApiResponseTransactionDetails>) {
+    const bundleGasPricing = bundleTransactions.reduce(
+      (acc, transactionDetail) => {
+        const gasUsed = transactionDetail.gas_used
+        const gasPrice = BigNumber.from(transactionDetail.gas_price)
+        const ethSentToCoinbase = transactionDetail.coinbase_transfer
+        return {
+          gasUsed: acc.gasUsed + gasUsed,
+          gasFees: acc.gasFees.add(gasPrice.mul(gasUsed)),
+          ethSentToCoinbase: acc.ethSentToCoinbase.add(ethSentToCoinbase)
+        }
+      },
+      {
+        gasUsed: 0,
+        gasFees: BigNumber.from(0),
+        ethSentToCoinbase: BigNumber.from(0)
+      }
+    )
+    return {
+      ...bundleGasPricing,
+      effectiveGasPriceToSearcher: bundleGasPricing.ethSentToCoinbase.add(bundleGasPricing.gasFees).div(bundleGasPricing.gasUsed)
+    }
+  }
+
+  public async getConflictingBundle(
+    targetSignedBundledTransactions: Array<string>,
+    targetBlockNumber: number
+  ): Promise<{ conflictType: FlashbotsBundleConflictType; conflictingBundle: Array<BlocksApiResponseTransactionDetails> }> {
+    const competingBundles = await this.fetchBlocksApi(targetBlockNumber)
+    if (competingBundles.latest_block_number <= targetBlockNumber) {
+      throw new Error('Blocks-api has not processed target block')
+    }
+    const blockDetails = competingBundles.blocks[0]
+    if (blockDetails === undefined) {
+      return {
+        conflictType: FlashbotsBundleConflictType.NoBundlesInBlock,
+        conflictingBundle: []
+      }
+    }
+    const bundleTransactions = blockDetails.transactions
+    const bundleCount = bundleTransactions[bundleTransactions.length - 1].bundle_index + 1
+    const initialSimulation = await this.simulate(targetSignedBundledTransactions, targetBlockNumber, targetBlockNumber - 1)
+    if ('error' in initialSimulation || initialSimulation.firstRevert !== undefined) {
+      throw new Error('Target bundle errors at top of block')
+    }
+    const signedPriorBundleTransactions = []
+    for (let i = 0; i < bundleCount; i++) {
+      const currentBundleTransactions = bundleTransactions.filter((bundleTransaction) => bundleTransaction.bundle_index === i)
+      const currentBundleSignedTxs = await Promise.all(
+        currentBundleTransactions.map(async (competitorBundleBlocksApiTx) => {
+          const tx = await this.genericProvider.getTransaction(competitorBundleBlocksApiTx.transaction_hash)
+          if (tx.raw === undefined) throw new Error('Could not get raw tx')
+          return tx.raw
+        })
+      )
+      signedPriorBundleTransactions.push(...currentBundleSignedTxs)
+      const competitorAndTargetBundleSimulation = await this.simulate(
+        [...signedPriorBundleTransactions, ...targetSignedBundledTransactions],
+        targetBlockNumber,
+        targetBlockNumber - 1
+      )
+
+      if ('error' in competitorAndTargetBundleSimulation) {
+        if (competitorAndTargetBundleSimulation.error.message.startsWith('err: nonce too low:')) {
+          return {
+            conflictType: FlashbotsBundleConflictType.NonceCollision,
+            conflictingBundle: currentBundleTransactions
+          }
+        }
+        throw new Error('Simulation error')
+      }
+      const targetSimulation = competitorAndTargetBundleSimulation.results.slice(-targetSignedBundledTransactions.length)
+      for (let j = 0; j < targetSimulation.length; j++) {
+        const targetSimulationTx = targetSimulation[j]
+        const initialSimulationTx = initialSimulation.results[j]
+        if ('error' in targetSimulationTx || 'error' in initialSimulationTx) {
+          if ('error' in targetSimulationTx != 'error' in initialSimulationTx) {
+            return {
+              conflictType: FlashbotsBundleConflictType.Error,
+              conflictingBundle: currentBundleTransactions
+            }
+          }
+          continue
+        }
+        if (targetSimulationTx.ethSentToCoinbase != initialSimulationTx.ethSentToCoinbase) {
+          return {
+            conflictType: FlashbotsBundleConflictType.CoinbasePayment,
+            conflictingBundle: currentBundleTransactions
+          }
+        }
+        if (targetSimulationTx.gasUsed != initialSimulation.results[j].gasUsed) {
+          return {
+            conflictType: FlashbotsBundleConflictType.GasUsed,
+            conflictingBundle: currentBundleTransactions
+          }
+        }
+      }
+    }
+    return {
+      conflictType: FlashbotsBundleConflictType.NoConflict,
+      conflictingBundle: []
+    }
+  }
+
+  public async fetchBlocksApi(blockNumber: number): Promise<BlocksApiResponse> {
+    return fetchJson(`https://blocks.flashbots.net/v1/blocks?block_number=${blockNumber}`)
   }
 
   private async request(request: string) {
