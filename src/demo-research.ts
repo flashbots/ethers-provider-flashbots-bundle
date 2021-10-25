@@ -1,5 +1,5 @@
-import { providers, Wallet } from 'ethers'
-import { FlashbotsBundleConflictType, FlashbotsBundleProvider } from './index'
+import { providers, utils, Wallet } from 'ethers'
+import { FlashbotsBundleConflictType, FlashbotsBundleProvider, FlashbotsGasPricing } from './index'
 
 const FLASHBOTS_AUTH_KEY = process.env.FLASHBOTS_AUTH_KEY
 
@@ -17,6 +17,14 @@ const FLASHBOTS_EP = undefined
 // const provider = new providers.InfuraProvider(CHAIN_ID, process.env.INFURA_API_KEY)
 // const FLASHBOTS_EP = 'https://relay-goerli.flashbots.net/'
 // ===== Uncomment this for Goerli =======
+
+function printGasPricing(gasPricing: FlashbotsGasPricing) {
+  console.log(`Gas Used: ${gasPricing.gasUsed} in ${gasPricing.txCount} txs`)
+  console.log(`[searcher] Gas Fees: ${utils.formatUnits(gasPricing.gasFeesPaidBySearcher)} ETH`)
+  console.log(`[searcher] Effective Gas Price: ${utils.formatUnits(gasPricing.effectiveGasPriceToSearcher, 'gwei')} gwei`)
+  console.log(`[miner] Priority Fees: ${utils.formatUnits(gasPricing.priorityFeesReceivedByMiner)} ETH`)
+  console.log(`[miner] Effective Priority Fee Per Gas: ${utils.formatUnits(gasPricing.effectivePriorityFeeToMiner, 'gwei')} gwei`)
+}
 
 async function main() {
   const authSigner = FLASHBOTS_AUTH_KEY ? new Wallet(FLASHBOTS_AUTH_KEY) : Wallet.createRandom()
@@ -40,14 +48,19 @@ async function main() {
 
   //// No Bundles
   // const conflictReport = await flashbotsProvider.getConflictingBundle(
-  //     [
-  //       '0xf901ad82095a852ea3491a80830dbba09407b9b7d3354fea8f651e39e97aabdfac4176da5880b90144b3dfe91400000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2030000000000000000004db7ae1ed05522740000000000000000503827419ce132760000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000000600000000000000000000006b3595068778dd592e39a122f4f5a5cf09c90fe202000000000000000000000000795065dcc9f64b5614c407a6efdc400da6221fb00000000000000000000000d291e7a03283640fdc51b121ac401383a46cc623020000000000000000000000008c8d312554011f564aa54b0c2335139087037c840000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc201000000000000000000000000dc2b82bc1106c9c5286e59344896fb0ceb932f5326a036804d0a9f48f3f1154d8a8a52937bb31976bb3d4d5d5acd46cc9c605459dd8ca032f028ba273ab9fa0547d5abc785fb896946d4bab03ca990b68f5269f6735d5f',
-  //     ],
-  //     13140329
+  //   [
+  //     '0xf901ad82095a852ea3491a80830dbba09407b9b7d3354fea8f651e39e97aabdfac4176da5880b90144b3dfe91400000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2030000000000000000004db7ae1ed05522740000000000000000503827419ce132760000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000000600000000000000000000006b3595068778dd592e39a122f4f5a5cf09c90fe202000000000000000000000000795065dcc9f64b5614c407a6efdc400da6221fb00000000000000000000000d291e7a03283640fdc51b121ac401383a46cc623020000000000000000000000008c8d312554011f564aa54b0c2335139087037c840000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc201000000000000000000000000dc2b82bc1106c9c5286e59344896fb0ceb932f5326a036804d0a9f48f3f1154d8a8a52937bb31976bb3d4d5d5acd46cc9c605459dd8ca032f028ba273ab9fa0547d5abc785fb896946d4bab03ca990b68f5269f6735d5f'
+  //   ],
+  //   13140329
   // )
 
-  if (conflictReport.conflictType !== FlashbotsBundleConflictType.NoConflict) {
-    console.log('Conflicting Bundle:', conflictReport.conflictingBundle)
+  console.log('Target Bundle Gas Pricing')
+  printGasPricing(conflictReport.targetBundleGasPricing)
+
+  if (conflictReport.conflictingBundleGasPricing !== undefined) {
+    console.log('\nConflicting Bundle:', conflictReport.conflictingBundle)
+    console.log('\nConflicting Bundle Gas Pricing')
+    printGasPricing(conflictReport.conflictingBundleGasPricing)
   }
   console.log('Conflict Type: ' + FlashbotsBundleConflictType[conflictReport.conflictType])
 }
