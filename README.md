@@ -178,6 +178,12 @@ The Flashbots relay can also return statistics about you as a user (identified s
   console.log(simulation.bundleHash)
   ```
 
+## Investigating Losses
+
+When your bundle fails to land in the specified block, there are many reasons why this could have occurred. For a list of reasons, check out [Flashbots Docs : Why didn't my transaction get included?](https://docs.flashbots.net/flashbots-auction/searchers/faq/#why-didnt-my-transaction-get-included). To aid in troubleshooting, this library offers a method that will simulate a bundle in multiple positions to identify the competing bundle that landed on chain (if there was one) and calculate the relevant pricing.
+
+For usage instructions, check out the `demo-research.ts`.
+
 ## How to run demo.ts
 
 Included is a simple demo of how to construct the FlashbotsProvider with auth signer authentication and submit a [non-functional] bundle. This will not yield any mev, but serves as a sample initialization to help integrate into your own functional searcher.
