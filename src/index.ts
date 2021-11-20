@@ -4,6 +4,7 @@ import { BaseProvider } from '@ethersproject/providers'
 import { ConnectionInfo, fetchJson } from '@ethersproject/web'
 import { BigNumber, ethers, providers, Signer } from 'ethers'
 import { id, keccak256 } from 'ethers/lib/utils'
+import { serialize } from '@ethersproject/transactions'
 
 export const DEFAULT_FLASHBOTS_RELAY = 'https://relay.flashbots.net'
 export const BASE_FEE_MAX_CHANGE_DENOMINATOR = 8
@@ -603,8 +604,17 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       const currentBundleSignedTxs = await Promise.all(
         currentBundleTransactions.map(async (competitorBundleBlocksApiTx) => {
           const tx = await this.genericProvider.getTransaction(competitorBundleBlocksApiTx.transaction_hash)
-          if (tx.raw === undefined) throw new Error('Could not get raw tx')
-          return tx.raw
+          if (tx.raw !== undefined) {
+            return tx.raw
+          }
+          if (tx.v !== undefined && tx.r !== undefined && tx.s !== undefined) {
+            return serialize(tx, {
+              v: tx.v,
+              r: tx.r,
+              s: tx.s
+            })
+          }
+          throw new Error('Could not get raw tx')
         })
       )
       signedPriorBundleTransactions.push(...currentBundleSignedTxs)
