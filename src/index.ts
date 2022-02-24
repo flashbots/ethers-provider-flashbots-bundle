@@ -282,7 +282,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       revertingTxHashes: opts?.revertingTxHashes
     }
 
-    const request = JSON.stringify(this.prepareBundleRequest('eth_sendBundle', [params]))
+    const request = JSON.stringify(this.prepareRelayRequest('eth_sendBundle', [params]))
     const response = await this.request(request)
     if (response.error !== undefined && response.error !== null) {
       return {
@@ -325,6 +325,63 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   ): Promise<FlashbotsTransaction> {
     const signedTransactions = await this.signBundle(bundledTransactions)
     return this.sendRawBundle(signedTransactions, targetBlockNumber, opts)
+  }
+
+  public async sendPrivateTransaction(
+    transaction: FlashbotsBundleTransaction,
+    targetBlockNumber: number,
+    opts?: FlashbotsOptions,
+  ): Promise<FlashbotsTransaction> {
+    return this.sendPrivateRawTransaction(
+      await transaction.signer.signTransaction(transaction.transaction),
+      targetBlockNumber,
+      opts
+    )
+  }
+
+  public async sendPrivateRawTransaction(
+    signedTransaction: string,
+    targetBlockNumber: number,
+    opts?: FlashbotsOptions,
+  ): Promise<FlashbotsTransaction> {
+    const params = {
+      tx: signedTransaction,
+      blockNumber: `0x${targetBlockNumber.toString(16)}`,
+      minTimestamp: opts?.minTimestamp,
+      maxTimestamp: opts?.maxTimestamp,
+    }
+    const request = JSON.stringify(this.prepareRelayRequest('eth_sendPrivateTransaction', [params]))
+    const response = await this.request(request)
+    if (response.error !== undefined && response.error !== null) {
+      return {
+        error: {
+          message: response.error.message,
+          code: response.error.code
+        }
+      }
+    }
+
+    const transactionDetails = ethers.utils.parseTransaction(signedTransaction)
+    const privateTransaction = {
+      signedTransaction: signedTransaction,
+      hash: ethers.utils.keccak256(signedTransaction),
+      account: transactionDetails.from || "0x0",
+      nonce: transactionDetails.nonce,
+    }
+
+    return {
+      bundleTransactions: [privateTransaction],
+      wait: () => this.wait([privateTransaction], targetBlockNumber, TIMEOUT_MS),
+      simulate: () =>
+        this.simulate(
+          [privateTransaction.signedTransaction],
+          targetBlockNumber,
+          undefined,
+          opts?.minTimestamp,
+        ),
+      receipts: () => this.fetchReceipts([privateTransaction]),
+      bundleHash: response.result.bundleHash,
+    }
   }
 
   public async signBundle(bundledTransactions: Array<FlashbotsBundleTransaction | FlashbotsBundleRawTransaction>): Promise<Array<string>> {
@@ -428,7 +485,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     const evmBlockNumber = `0x${blockDetails.number.toString(16)}`
 
     const params = [evmBlockNumber]
-    const request = JSON.stringify(this.prepareBundleRequest('flashbots_getUserStats', params))
+    const request = JSON.stringify(this.prepareRelayRequest('flashbots_getUserStats', params))
     const response = await this.request(request)
     if (response.error !== undefined && response.error !== null) {
       return {
@@ -446,7 +503,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     const evmBlockNumber = `0x${blockNumber.toString(16)}`
 
     const params = [{ bundleHash, blockNumber: evmBlockNumber }]
-    const request = JSON.stringify(this.prepareBundleRequest('flashbots_getBundleStats', params))
+    const request = JSON.stringify(this.prepareRelayRequest('flashbots_getBundleStats', params))
     const response = await this.request(request)
     if (response.error !== undefined && response.error !== null) {
       return {
@@ -492,7 +549,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
         timestamp: blockTimestamp
       }
     ]
-    const request = JSON.stringify(this.prepareBundleRequest('eth_callBundle', params))
+    const request = JSON.stringify(this.prepareRelayRequest('eth_callBundle', params))
     const response = await this.request(request)
     if (response.error !== undefined && response.error !== null) {
       return {
@@ -688,8 +745,8 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     return Promise.all(bundledTransactions.map((bundledTransaction) => this.genericProvider.getTransactionReceipt(bundledTransaction.hash)))
   }
 
-  private prepareBundleRequest(
-    method: 'eth_callBundle' | 'eth_sendBundle' | 'flashbots_getUserStats' | 'flashbots_getBundleStats',
+  private prepareRelayRequest(
+    method: 'eth_callBundle' | 'eth_sendBundle' | 'eth_sendPrivateTransaction' | 'flashbots_getUserStats' | 'flashbots_getBundleStats',
     params: RpcParams
   ) {
     return {
