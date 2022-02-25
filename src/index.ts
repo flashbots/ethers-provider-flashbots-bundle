@@ -8,11 +8,17 @@ import { serialize } from '@ethersproject/transactions'
 
 export const DEFAULT_FLASHBOTS_RELAY = 'https://relay.flashbots.net'
 export const BASE_FEE_MAX_CHANGE_DENOMINATOR = 8
+const PRIVATE_TX_WAIT_BLOCKS = 25 // # of blocks
 
 export enum FlashbotsBundleResolution {
   BundleIncluded,
   BlockPassedWithoutInclusion,
   AccountNonceTooHigh
+}
+
+export enum FlashbotsTransactionResolution {
+  TransactionIncluded,
+  TransactionDropped,
 }
 
 export enum FlashbotsBundleConflictType {
@@ -48,7 +54,7 @@ export interface TransactionAccountNonce {
 
 export interface FlashbotsTransactionResponse {
   bundleTransactions: Array<TransactionAccountNonce>
-  wait: () => Promise<FlashbotsBundleResolution>
+  wait: () => Promise<FlashbotsBundleResolution | FlashbotsTransactionResolution>
   simulate: () => Promise<SimulationResponse>
   receipts: () => Promise<Array<TransactionReceipt>>
   bundleHash: string
@@ -305,7 +311,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
 
     return {
       bundleTransactions,
-      wait: () => this.wait(bundleTransactions, targetBlockNumber, TIMEOUT_MS),
+      wait: () => this.waitForBlock(bundleTransactions, targetBlockNumber, TIMEOUT_MS),
       simulate: () =>
         this.simulate(
           bundleTransactions.map((tx) => tx.signedTransaction),
@@ -344,9 +350,8 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   public async sendPrivateRawTransaction(
     signedTransaction: string,
     opts?: {
-      targetBlockNumber?: number, // block to check for tx inclusion using wait()
-      maxBlockNumber?: number,    // highest block # in which the bundle might be included
-      minTimestamp?: number,      // sim timestamp
+      maxBlockNumber?: number,  // highest block # in which the bundle might be included
+      minTimestamp?: number,    // sim timestamp
     },
   ): Promise<FlashbotsTransaction> {
     const params = {
@@ -372,15 +377,15 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       nonce: transactionDetails.nonce,
     }
 
-    const targetBlockNumber = opts?.targetBlockNumber || (await this.genericProvider.getBlockNumber()) + 1;
+    const startBlockNumber = await this.genericProvider.getBlockNumber();
 
     return {
       bundleTransactions: [privateTransaction],
-      wait: () => this.wait([privateTransaction], targetBlockNumber, TIMEOUT_MS),
+      wait: () => this.waitForTxInclusion(privateTransaction.hash, startBlockNumber, TIMEOUT_MS, opts?.maxBlockNumber),
       simulate: () =>
         this.simulate(
           [privateTransaction.signedTransaction],
-          targetBlockNumber,
+          startBlockNumber,
           undefined,
           opts?.minTimestamp,
         ),
@@ -418,7 +423,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     return signedTransactions
   }
 
-  private wait(transactionAccountNonces: Array<TransactionAccountNonce>, targetBlockNumber: number, timeout: number) {
+  private waitForBlock(transactionAccountNonces: Array<TransactionAccountNonce>, targetBlockNumber: number, timeout: number) {
     return new Promise<FlashbotsBundleResolution>((resolve, reject) => {
       let timer: NodeJS.Timer | null = null
       let done = false
@@ -468,6 +473,58 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       this.genericProvider.on('block', handler)
 
       if (typeof timeout === 'number' && timeout > 0) {
+        timer = setTimeout(() => {
+          if (done) {
+            return
+          }
+          timer = null
+          done = true
+
+          this.genericProvider.removeListener('block', handler)
+          reject('Timed out')
+        }, timeout)
+        if (timer.unref) {
+          timer.unref()
+        }
+      }
+    })
+  }
+
+  private waitForTxInclusion(transactionHash: string, startBlockNumber: number, timeout: number, maxBlockNumber?: number) {
+    return new Promise<FlashbotsTransactionResolution>((resolve, reject) => {
+      let timer: NodeJS.Timer | null = null
+      let done = false
+      const maxBlockNum = maxBlockNumber || startBlockNumber + PRIVATE_TX_WAIT_BLOCKS;
+
+      // runs on new block event
+      const handler = async (blockNumber: number) => {
+        if (blockNumber <= maxBlockNum) {
+          // search for tx in block
+          const block = await this.genericProvider.getBlock(blockNumber);
+          if (block.transactions.includes(transactionHash)) {
+            resolve(FlashbotsTransactionResolution.TransactionIncluded)
+          } else {
+            return
+          }
+        } else {
+          // tx not included in specified range, bail
+          this.genericProvider.removeListener('block', handler)
+          resolve(FlashbotsTransactionResolution.TransactionDropped)
+        }
+
+        if (timer) {
+          clearTimeout(timer)
+        }
+        if (done) {
+          return
+        }
+        done = true
+      }
+
+      this.genericProvider.on('block', handler)
+
+      // time out if we've been trying for too long
+      if (timeout > 0) {
         timer = setTimeout(() => {
           if (done) {
             return
