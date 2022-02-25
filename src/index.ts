@@ -336,7 +336,6 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   public async sendPrivateTransaction(
     transaction: FlashbotsBundleTransaction,
     opts?: {
-      targetBlockNumber?: number,
       maxBlockNumber?: number,
       minTimestamp?: number,
     },
