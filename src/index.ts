@@ -466,7 +466,6 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
           return
         }
         done = true
-
         this.genericProvider.removeListener('block', handler)
       }
       this.genericProvider.on('block', handler)
@@ -518,6 +517,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
           return
         }
         done = true
+        this.genericProvider.removeListener('block', handler)
       }
 
       this.genericProvider.on('block', handler)
