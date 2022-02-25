@@ -329,26 +329,24 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
 
   public async sendPrivateTransaction(
     transaction: FlashbotsBundleTransaction,
-    targetBlockNumber: number,
-    opts?: FlashbotsOptions,
+    maxBlockNumber: number,
+    minTimestamp?: number,
   ): Promise<FlashbotsTransaction> {
     return this.sendPrivateRawTransaction(
       await transaction.signer.signTransaction(transaction.transaction),
-      targetBlockNumber,
-      opts
+      maxBlockNumber,
+      minTimestamp,
     )
   }
 
   public async sendPrivateRawTransaction(
     signedTransaction: string,
-    targetBlockNumber: number,
-    opts?: FlashbotsOptions,
+    maxBlockNumber: number,
+    minTimestamp?: number,
   ): Promise<FlashbotsTransaction> {
     const params = {
       tx: signedTransaction,
-      blockNumber: `0x${targetBlockNumber.toString(16)}`,
-      minTimestamp: opts?.minTimestamp,
-      maxTimestamp: opts?.maxTimestamp,
+      maxBlockNumber: `0x${maxBlockNumber.toString(16)}`,
     }
     const request = JSON.stringify(this.prepareRelayRequest('eth_sendPrivateTransaction', [params]))
     const response = await this.request(request)
@@ -371,13 +369,13 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
 
     return {
       bundleTransactions: [privateTransaction],
-      wait: () => this.wait([privateTransaction], targetBlockNumber, TIMEOUT_MS),
+      wait: () => this.wait([privateTransaction], maxBlockNumber, TIMEOUT_MS),
       simulate: () =>
         this.simulate(
           [privateTransaction.signedTransaction],
-          targetBlockNumber,
+          maxBlockNumber,
           undefined,
-          opts?.minTimestamp,
+          minTimestamp,
         ),
       receipts: () => this.fetchReceipts([privateTransaction]),
       bundleHash: response.result.bundleHash,
