@@ -60,6 +60,13 @@ export interface FlashbotsTransactionResponse {
   bundleHash: string
 }
 
+export interface FlashbotsPrivateTransactionResponse {
+  transaction: TransactionAccountNonce
+  wait: () => Promise<FlashbotsBundleResolution | FlashbotsTransactionResolution>
+  simulate: () => Promise<SimulationResponse>
+  receipts: () => Promise<Array<TransactionReceipt>>
+}
+
 export interface TransactionSimulationBase {
   txHash: string
   gasUsed: number
@@ -99,6 +106,8 @@ export interface SimulationResponseSuccess {
 export type SimulationResponse = SimulationResponseSuccess | RelayResponseError
 
 export type FlashbotsTransaction = FlashbotsTransactionResponse | RelayResponseError
+
+export type FlashbotsPrivateTransaction = FlashbotsPrivateTransactionResponse | RelayResponseError
 
 export interface GetUserStatsResponseSuccess {
   signing_address: string
@@ -339,7 +348,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       maxBlockNumber?: number,
       minTimestamp?: number,
     },
-  ): Promise<FlashbotsTransaction> {
+  ): Promise<FlashbotsPrivateTransaction> {
     return this.sendPrivateRawTransaction(
       await transaction.signer.signTransaction(transaction.transaction),
       opts,
@@ -352,7 +361,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       maxBlockNumber?: number,  // highest block # in which the bundle might be included
       minTimestamp?: number,    // sim timestamp
     },
-  ): Promise<FlashbotsTransaction> {
+  ): Promise<FlashbotsPrivateTransaction> {
     const params = {
       tx: signedTransaction,
       maxBlockNumber: opts?.maxBlockNumber,
@@ -379,7 +388,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     const startBlockNumber = await this.genericProvider.getBlockNumber();
 
     return {
-      bundleTransactions: [privateTransaction],
+      transaction: privateTransaction,
       wait: () => this.waitForTxInclusion(privateTransaction.hash, startBlockNumber, TIMEOUT_MS, opts?.maxBlockNumber),
       simulate: () =>
         this.simulate(
@@ -389,8 +398,25 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
           opts?.minTimestamp,
         ),
       receipts: () => this.fetchReceipts([privateTransaction]),
-      bundleHash: response.result.bundleHash,
     }
+  }
+
+  public async cancelPrivateTransaction(txHash: string): Promise<boolean | RelayResponseError> {
+    const params = {
+      txHash,
+    }
+    const request = JSON.stringify(this.prepareRelayRequest('eth_cancelPrivateTransaction', [params]))
+    const response = await this.request(request)
+    if (response.error !== undefined && response.error !== null) {
+      return {
+        error: {
+          message: response.error.message,
+          code: response.error.code
+        }
+      }
+    }
+
+    return true;
   }
 
   public async signBundle(bundledTransactions: Array<FlashbotsBundleTransaction | FlashbotsBundleRawTransaction>): Promise<Array<string>> {
@@ -807,7 +833,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   }
 
   private prepareRelayRequest(
-    method: 'eth_callBundle' | 'eth_sendBundle' | 'eth_sendPrivateTransaction' | 'flashbots_getUserStats' | 'flashbots_getBundleStats',
+    method: 'eth_callBundle' | 'eth_sendBundle' | 'eth_sendPrivateTransaction' | 'eth_cancelPrivateTransaction' | 'flashbots_getUserStats' | 'flashbots_getBundleStats',
     params: RpcParams
   ) {
     return {
