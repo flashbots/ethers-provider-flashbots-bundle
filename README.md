@@ -1,6 +1,6 @@
 # ethers-provider-flashbots-bundle
 
-This repository contains the `FlashbotsBundleProvider` ethers.js provider, an additional `Provider` to `ethers.js` to enable high-level access to `eth_sendBundle` and `eth_callBundle` rpc endpoint on [mev-relay](https://github.com/flashbots/mev-relay-js). **`mev-relay` is a hosted service; it is not necessary to run `mev-relay` or `mev-geth` to proceed with this example.** 
+This repository contains the `FlashbotsBundleProvider` ethers.js provider, an additional `Provider` to `ethers.js` to enable high-level access to `eth_sendBundle` and `eth_callBundle` rpc endpoint on [mev-relay](https://github.com/flashbots/mev-relay-js). **`mev-relay` is a hosted service; it is not necessary to run `mev-relay` or `mev-geth` to proceed with this example.**
 
 Flashbots-enabled relays and miners expose two new jsonrpc endpoints: `eth_sendBundle` and `eth_callBundle`. Since these are non-standard endpoints, ethers.js and other libraries do not natively support these requests (like `getTransactionCount`). In order to interact with these endpoints, you will need access to another full-featured (non-Flashbots) endpoint for nonce-calculation, gas estimation, and transaction status.
 
@@ -10,7 +10,8 @@ This library is not a fully functional ethers.js implementation, just a simple p
 
 ## Example
 
-Install ethers.js and the Flashbots ethers bundle provider
+Install ethers.js and the Flashbots ethers bundle provider.
+
 ```bash
 npm install --save ethers
 npm install --save @flashbots/ethers-provider-bundle
@@ -61,6 +62,7 @@ const transactionBundle = [
 ```
 
 ## Block Targeting
+
 The last thing required for `sendBundle()` is block targeting. Every bundle specifically references a single block. If your bundle is valid for multiple blocks (including all blocks until it is mined), `sendBundle()` must be called for every block, ideally on one of the blocks immediately prior. This gives you a chance to re-evaluate the opportunity you are capturing and re-sign your transactions with a higher nonce, if necessary.
 
 The block should always be a _future_ block, never the current one.
@@ -70,9 +72,10 @@ const targetBlockNumber = (await provider.getBlockNumber()) + 1
 ```
 
 ## Gas Prices and EIP-1559
-Before EIP-1559 was activated, the most common way for searchers to submit transactions is with `gasPrice=0`, with an on-chain payment to `block.coinbase` conditional on the transaction's success. All transactions must pay `baseFee` now, an attribute of a block. For an example of how to ensure you are using this `baseFee`, see `demo.ts` in this repository. 
 
-```
+Before EIP-1559 was activated, the most common way for searchers to submit transactions is with `gasPrice=0`, with an on-chain payment to `block.coinbase` conditional on the transaction's success. All transactions must pay `baseFee` now, an attribute of a block. For an example of how to ensure you are using this `baseFee`, see `demo.ts` in this repository.
+
+```js
 const block = await provider.getBlock(blockNumber)
 const maxBaseFeeInFutureBlock = FlashbotsBundleProvider.getMaxBaseFeeInFutureBlock(block.baseFeePerGas, BLOCKS_IN_THE_FUTURE)
 const eip1559Transaction = {
@@ -101,6 +104,7 @@ Now that we have:
 We can run simulations and submit directly to miners, via the `mev-relay`.
 
 Simulate:
+
 ```ts
   const signedTransactions = await flashbotsProvider.signBundle(transactionBundle)
   const simulation = await flashbotsProvider.simulate(signedTransactions, targetBlockNumber)
@@ -108,6 +112,7 @@ Simulate:
 ```
 
 Send:
+
 ```ts
 const flashbotsTransactionResponse = await flashbotsProvider.sendBundle(
   transactionBundle,
@@ -116,6 +121,7 @@ const flashbotsTransactionResponse = await flashbotsProvider.sendBundle(
 ```
 
 ## FlashbotsTransactionResponse
+
 After calling `sendBundle`, this provider will return a Promise of an object with helper functions related to the bundle you submitted.
 
 These functions return metadata available at transaction submission time, as well as the following functions which can wait, track, and simulate the bundle's behavior.
@@ -128,6 +134,7 @@ These functions return metadata available at transaction submission time, as wel
 ## Optional eth_sendBundle arguments
 
 Beyond target block number, an object can be passed in with optional attributes:
+
 ```ts
 {
   minTimestamp, // optional minimum timestamp at which this bundle is valid (inclusive)
@@ -138,7 +145,7 @@ Beyond target block number, an object can be passed in with optional attributes:
 
 ### minTimestamp / maxTimestamp
 
-While each bundle targets only a single block, you can add a filter for validity based on the block's timestamp. This does *not* allow for targeting any block number based on a timestamp or instruct miners on what timestamp to use, it merely serves as a secondary filter.
+While each bundle targets only a single block, you can add a filter for validity based on the block's timestamp. This does _not_ allow for targeting any block number based on a timestamp or instruct miners on what timestamp to use, it merely serves as a secondary filter.
 
 If your bundle is not valid before a certain time or includes an expiring opportunity, setting these values allows the miner to skip bundle processing earlier in the phase.
 
@@ -146,7 +153,7 @@ Additionally, you could target several blocks in the future, but with a strict m
 
 ### Reverting Transaction Hashes
 
-Transaction bundles will not be considered for inclusion if they include *any* transactions that revert or fail. While this is normally desirable, there are some advanced use-cases where a searcher might WANT to bring a failing transaction to the chain. This is normally desirable for nonce management. Consider:
+Transaction bundles will not be considered for inclusion if they include _any_ transactions that revert or fail. While this is normally desirable, there are some advanced use-cases where a searcher might WANT to bring a failing transaction to the chain. This is normally desirable for nonce management. Consider:
 
 Transaction Nonce #1 = Failed (unrelated) token transfer
 Transaction Nonce #2 = DEX trade
@@ -169,10 +176,12 @@ The entire value of the bundle is added up at the end, so not every transaction 
 Note: Gas-fees will ONLY benefit your bundle if the transaction is not already present in the mempool. When including a pending transaction in your bundle, it is similar to that transaction having a gas price of `0`; other transactions in your bundle will need to pay more for the gas it uses.
 
 ## Bundle and User Statistics
+
 The Flashbots relay can also return statistics about you as a user (identified solely by your signing address) and any bundle previously submitted.
 
 - `getUserStats()` returns aggregate metrics about past performance, including if your signing key is currently eligible for the "high priority" queue. [Read more about searcher reputation here](https://docs.flashbots.net/flashbots-auction/searchers/advanced/reputation)
 - `getBundleStats(bundleHash, targetBlockNumber)` returns data specific to a single bundle submission, including detailed timestamps for the various phases a bundle goes before reaching miners. You can get the bundleHash from the simulation:
+
   ```js
   const simulation = await flashbotsProvider.simulate(signedTransactions, targetBlockNumber)
   console.log(simulation.bundleHash)
@@ -188,17 +197,38 @@ For usage instructions, check out the `demo-research.ts`.
 
 Included is a simple demo of how to construct the FlashbotsProvider with auth signer authentication and submit a [non-functional] bundle. This will not yield any mev, but serves as a sample initialization to help integrate into your own functional searcher.
 
+## Sending a Private Transaction
+
+To send a _single_ transaction without having to send it as a bundle, use the `sendPrivateTransaction` function. This method allows us to process transactions faster and more efficiently than regular bundles.
+
+```js
+const tx = {
+    from: authSigner.address,
+    to: authSigner.address,
+    value: "0x42",
+    gasPrice: BigNumber.from(99).mul(1e9), // 99 gwei
+    gasLimit: BigNumber.from(21000),
+}
+const privateTx = {
+    transaction: tx,
+    signer: wallet,
+}
+const res = await flashbotsProvider.sendPrivateTransaction(privateTx, targetBlockNum)
+```
+
 ## Flashbots on Goerli
 
 To test Flashbots before going to mainnet, you can use the Goerli Flashbots relay, which works in conjunction with a Flashbots-enabled Goerli validator. Flashbots on Goerli requires two simple changes:
 
 1. Ensure your genericProvider passed in to the FlashbotsBundleProvider constructor is connected to Goerli (gas estimates and nonce requests need to correspond to the correct chain):
+
 ```ts
 import { providers } from 'ethers'
 const provider = providers.getDefaultProvider('goerli')
 ```
 
 2. Set the relay endpoint to `https://relay-goerli.flashbots.net/`
+
 ```ts
 const flashbotsProvider = await FlashbotsBundleProvider.create(
   provider,
