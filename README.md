@@ -203,8 +203,8 @@ To send a _single_ transaction without having to send it as a bundle, use the `s
 
 ```js
 const tx = {
-    from: authSigner.address,
-    to: authSigner.address,
+    from: wallet.address,
+    to: wallet.address,
     value: "0x42",
     gasPrice: BigNumber.from(99).mul(1e9), // 99 gwei
     gasLimit: BigNumber.from(21000),
