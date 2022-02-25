@@ -329,24 +329,29 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
 
   public async sendPrivateTransaction(
     transaction: FlashbotsBundleTransaction,
-    maxBlockNumber: number,
-    minTimestamp?: number,
+    opts?: {
+      targetBlockNumber?: number,
+      maxBlockNumber?: number,
+      minTimestamp?: number,
+    },
   ): Promise<FlashbotsTransaction> {
     return this.sendPrivateRawTransaction(
       await transaction.signer.signTransaction(transaction.transaction),
-      maxBlockNumber,
-      minTimestamp,
+      opts,
     )
   }
 
   public async sendPrivateRawTransaction(
     signedTransaction: string,
-    maxBlockNumber: number,
-    minTimestamp?: number,
+    opts?: {
+      targetBlockNumber?: number, // block to check for tx inclusion using wait()
+      maxBlockNumber?: number,    // highest block # in which the bundle might be included
+      minTimestamp?: number,      // sim timestamp
+    },
   ): Promise<FlashbotsTransaction> {
     const params = {
       tx: signedTransaction,
-      maxBlockNumber: `0x${maxBlockNumber.toString(16)}`,
+      maxBlockNumber: opts?.maxBlockNumber,
     }
     const request = JSON.stringify(this.prepareRelayRequest('eth_sendPrivateTransaction', [params]))
     const response = await this.request(request)
@@ -367,15 +372,17 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       nonce: transactionDetails.nonce,
     }
 
+    const targetBlockNumber = opts?.targetBlockNumber || (await this.genericProvider.getBlockNumber()) + 1;
+
     return {
       bundleTransactions: [privateTransaction],
-      wait: () => this.wait([privateTransaction], maxBlockNumber, TIMEOUT_MS),
+      wait: () => this.wait([privateTransaction], targetBlockNumber, TIMEOUT_MS),
       simulate: () =>
         this.simulate(
           [privateTransaction.signedTransaction],
-          maxBlockNumber,
+          targetBlockNumber,
           undefined,
-          minTimestamp,
+          opts?.minTimestamp,
         ),
       receipts: () => this.fetchReceipts([privateTransaction]),
       bundleHash: response.result.bundleHash,

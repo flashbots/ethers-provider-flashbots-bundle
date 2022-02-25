@@ -214,13 +214,23 @@ const privateTx = {
     signer: wallet,
 }
 
-const res = await flashbotsProvider.sendPrivateTransaction(privateTx, targetBlockNum)
+const res = await flashbotsProvider.sendPrivateTransaction(privateTx)
 ```
 
-Optionally, you can set the `minTimestamp` parameter to specify a timestamp for bundle simulation.
+Optionally, you can set the following parameters to fine-tune your submission:
 
 ```js
-const res = await flashbotsProvider.sendPrivateTransaction(privateTx, targetBlockNum, 1645750614)
+// highest block number your tx can be included in
+const maxBlockNumber = (await provider.getBlockNumber()) + 10;
+// block to check for tx inclusion using res.wait()
+const targetBlockNumber = (await provider.getBlockNumber()) + 1;
+// timestamp for simulations
+const minTimestamp = 1645753192;
+
+const res = await flashbotsProvider.sendPrivateTransaction(
+  privateTx, 
+  {maxBlockNumber, targetBlockNumber, minTimestamp}
+)
 ```
 
 ## Flashbots on Goerli
