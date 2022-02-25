@@ -199,7 +199,7 @@ Included is a simple demo of how to construct the FlashbotsProvider with auth si
 
 ## Sending a Private Transaction
 
-To send a _single_ transaction without having to send it as a bundle, use the `sendPrivateTransaction` function. This method allows us to process transactions faster and more efficiently than regular bundles.
+To send a _single_ transaction without having to send it as a bundle, use the `sendPrivateTransaction` function. This method allows us to process transactions faster and more efficiently than regular bundles. When you send a transaction using this method, we will try to send it to miners over the next 25 blocks (up to, but not past the target block number).
 
 ```js
 const tx = {
@@ -213,7 +213,14 @@ const privateTx = {
     transaction: tx,
     signer: wallet,
 }
+
 const res = await flashbotsProvider.sendPrivateTransaction(privateTx, targetBlockNum)
+```
+
+Optionally, you can set the `minTimestamp` parameter to specify a timestamp for bundle simulation.
+
+```js
+const res = await flashbotsProvider.sendPrivateTransaction(privateTx, targetBlockNum, 1645750614)
 ```
 
 ## Flashbots on Goerli
