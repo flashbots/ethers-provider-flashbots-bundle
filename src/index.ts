@@ -362,6 +362,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       minTimestamp?: number,    // sim timestamp
     },
   ): Promise<FlashbotsPrivateTransaction> {
+    const startBlockNumberPromise = this.genericProvider.getBlockNumber()
     const params = {
       tx: signedTransaction,
       maxBlockNumber: opts?.maxBlockNumber,
@@ -384,8 +385,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       account: transactionDetails.from || "0x0",
       nonce: transactionDetails.nonce,
     }
-
-    const startBlockNumber = await this.genericProvider.getBlockNumber()
+    const startBlockNumber = await startBlockNumberPromise
 
     return {
       transaction: privateTransaction,
