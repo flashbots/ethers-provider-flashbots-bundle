@@ -522,9 +522,9 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       // runs on new block event
       const handler = async (blockNumber: number) => {
         if (blockNumber <= maxBlockNumber) {
-          // search for tx in block
-          const block = await this.genericProvider.getBlock(blockNumber);
-          if (block.transactions.includes(transactionHash)) {
+          // check tx status on mainnet
+          const sentTxStatus = await this.genericProvider.getTransaction(transactionHash)
+          if (sentTxStatus && sentTxStatus.confirmations >= 1) {
             resolve(FlashbotsTransactionResolution.TransactionIncluded)
           } else {
             return
