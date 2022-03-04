@@ -385,11 +385,11 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       nonce: transactionDetails.nonce,
     }
 
-    const startBlockNumber = await this.genericProvider.getBlockNumber();
+    const startBlockNumber = await this.genericProvider.getBlockNumber()
 
     return {
       transaction: privateTransaction,
-      wait: () => this.waitForTxInclusion(privateTransaction.hash, startBlockNumber, TIMEOUT_MS, opts?.maxBlockNumber),
+      wait: () => this.waitForTxInclusion(privateTransaction.hash, opts?.maxBlockNumber || startBlockNumber + 25, TIMEOUT_MS),
       simulate: () =>
         this.simulate(
           [privateTransaction.signedTransaction],
@@ -514,15 +514,14 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     })
   }
 
-  private waitForTxInclusion(transactionHash: string, startBlockNumber: number, timeout: number, maxBlockNumber?: number) {
+  private waitForTxInclusion(transactionHash: string, maxBlockNumber: number, timeout: number) {
     return new Promise<FlashbotsTransactionResolution>((resolve, reject) => {
       let timer: NodeJS.Timer | null = null
       let done = false
-      const maxBlockNum = maxBlockNumber || startBlockNumber + PRIVATE_TX_WAIT_BLOCKS;
 
       // runs on new block event
       const handler = async (blockNumber: number) => {
-        if (blockNumber <= maxBlockNum) {
+        if (blockNumber <= maxBlockNumber) {
           // search for tx in block
           const block = await this.genericProvider.getBlock(blockNumber);
           if (block.transactions.includes(transactionHash)) {
