@@ -343,25 +343,18 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   }
 
   public async sendPrivateTransaction(
-    transaction: FlashbotsBundleTransaction,
+    transaction: FlashbotsBundleTransaction | FlashbotsBundleRawTransaction,
     opts?: {
       maxBlockNumber?: number,
       minTimestamp?: number,
     },
   ): Promise<FlashbotsPrivateTransaction> {
-    return this.sendPrivateRawTransaction(
-      await transaction.signer.signTransaction(transaction.transaction),
-      opts,
-    )
-  }
-
-  public async sendPrivateRawTransaction(
-    signedTransaction: string,
-    opts?: {
-      maxBlockNumber?: number,  // highest block # in which the bundle might be included
-      minTimestamp?: number,    // sim timestamp
-    },
-  ): Promise<FlashbotsPrivateTransaction> {
+    let signedTransaction: string;
+    if ("signedTransaction" in transaction) {
+      signedTransaction = transaction.signedTransaction
+    } else {
+      signedTransaction = await transaction.signer.signTransaction(transaction.transaction)
+    }
     const startBlockNumberPromise = this.genericProvider.getBlockNumber()
     const params = {
       tx: signedTransaction,
