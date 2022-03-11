@@ -346,7 +346,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     transaction: FlashbotsBundleTransaction | FlashbotsBundleRawTransaction,
     opts?: {
       maxBlockNumber?: number,
-      minTimestamp?: number,
+      simulationTimestamp?: number,
     },
   ): Promise<FlashbotsPrivateTransaction> {
     let signedTransaction: string;
@@ -388,7 +388,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
           [privateTransaction.signedTransaction],
           startBlockNumber,
           undefined,
-          opts?.minTimestamp,
+          opts?.simulationTimestamp,
         ),
       receipts: () => this.fetchReceipts([privateTransaction]),
     }
