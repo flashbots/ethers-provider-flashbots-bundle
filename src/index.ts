@@ -217,6 +217,23 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     return false
   }
 
+  /**
+   * Creates a new Flashbots provider.
+   * @param genericProvider ethers.js mainnet provider
+   * @param authSigner account to sign bundles
+   * @param connectionInfoOrUrl (optional) connection settings
+   * @param network (optional) network settings
+   * @returns Flashbots provider, connected to the Flashbots Relay
+   *
+   * @example
+   * ```typescript
+   * const {providers, Wallet} = require("ethers")
+   * const {FlashbotsBundleProvider} = require("@flashbots/ethers-provider-bundle")
+   * const authSigner = Wallet.createRandom()
+   * const provider = new providers.JsonRpcProvider("http://localhost:8545")
+   * const fbProvider = await FlashbotsBundleProvider.create(provider, authSigner)
+   * ```
+   */
   static async create(
     genericProvider: BaseProvider,
     authSigner: Signer,
@@ -253,6 +270,11 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     return new FlashbotsBundleProvider(genericProvider, authSigner, connectionInfo, networkish)
   }
 
+  /**
+   * Calculates maximum base fee in future block.
+   * @param baseFee current base fee
+   * @param blocksInFuture number of blocks in the future
+   */
   static getMaxBaseFeeInFutureBlock(baseFee: BigNumber, blocksInFuture: number): BigNumber {
     let maxBaseFee = BigNumber.from(baseFee)
     for (let i = 0; i < blocksInFuture; i++) {
@@ -261,6 +283,15 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     return maxBaseFee
   }
 
+  /**
+   * Calculates an optimal base fee for inclusion in the next block.
+   * Useful when a bundle is not landing, but simulation is passing.
+   * //TODO: Verify my assessment. I'm not sure it's accurate... 
+   * @param currentBaseFeePerGas base fee of current block (wei)
+   * @param currentGasUsed gas used by tx in simulation
+   * @param currentGasLimit gas limit of transaction
+   * @returns adjusted base fee
+   */
   static getBaseFeeInNextBlock(currentBaseFeePerGas: BigNumber, currentGasUsed: BigNumber, currentGasLimit: BigNumber): BigNumber {
     const currentGasTarget = currentGasLimit.div(2)
 
@@ -279,11 +310,34 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     }
   }
 
+  /**
+   * Calculates a bundle hash locally.
+   * @param txHashes hashes of transactions in the bundle
+   */
   static generateBundleHash(txHashes: Array<string>): string {
     const concatenatedHashes = txHashes.map((txHash) => txHash.slice(2)).join('')
     return keccak256(`0x${concatenatedHashes}`)
   }
 
+  /**
+   * Sends a signed flashbots bundle to Flashbots Relay.
+   * @param signedBundledTransactions array of raw signed transactions
+   * @param targetBlockNumber block to target for bundle inclusion
+   * @param opts (optional) settings
+   * @returns callbacks for handling results, and the bundle's hash
+   *
+   * @example
+   * ```typescript
+   * const bundle: Array<FlashbotsBundleRawTransaction> = [
+   *    {signedTransaction: "0x01010101010101010101010101"},
+   *    {signedTransaction: "0x01010101010101010101010102"},
+   * ]
+   * const signedBundle = await fbProvider.signBundle(bundle)
+   * const blockNum = await provider.getBlockNumber()
+   * const bundleRes = await fbProvider.sendRawBundle(signedBundle, blockNum + 1)
+   * const success = (await bundleRes.wait()) === FlashbotsBundleResolution.BundleIncluded
+   * ```
+   */
   public async sendRawBundle(
     signedBundledTransactions: Array<string>,
     targetBlockNumber: number,
@@ -320,7 +374,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
 
     return {
       bundleTransactions,
-      wait: () => this.waitForBlock(bundleTransactions, targetBlockNumber, TIMEOUT_MS),
+      wait: () => this.waitForBundleInclusion(bundleTransactions, targetBlockNumber, TIMEOUT_MS),
       simulate: () =>
         this.simulate(
           bundleTransactions.map((tx) => tx.signedTransaction),
@@ -333,6 +387,13 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     }
   }
 
+  /**
+   * Sends a bundle to Flashbots, supports multiple transaction interfaces.
+   * @param bundledTransactions array of transactions, either signed or provided with a signer.
+   * @param targetBlockNumber block to target for bundle inclusion
+   * @param opts (optional) settings
+   * @returns callbacks for handling results, and the bundle's hash
+   */
   public async sendBundle(
     bundledTransactions: Array<FlashbotsBundleTransaction | FlashbotsBundleRawTransaction>,
     targetBlockNumber: number,
@@ -342,6 +403,21 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     return this.sendRawBundle(signedTransactions, targetBlockNumber, opts)
   }
 
+  /**
+   * Sends a single transaction to Flashbots private tx service.
+   * @param transaction transaction, either signed or provided with a signer
+   * @param opts (optional) settings
+   * @returns callbacks for handling results, and transaction data
+   *
+   * @example
+   * ```typescript
+   * const tx: FlashbotsBundleRawTransaction = {signedTransaction: "0x01010101010101010101010101"}
+   * const blockNum = await provider.getBlockNumber()
+   * // try sending for 5 blocks
+   * const response = await fbProvider.sendPrivateTransaction(tx, {maxBlockNumber: blockNum + 5})
+   * const success = (await response.wait()) === FlashbotsTransactionResolution.TransactionIncluded
+   * ```
+   */
   public async sendPrivateTransaction(
     transaction: FlashbotsBundleTransaction | FlashbotsBundleRawTransaction,
     opts?: {
@@ -349,13 +425,15 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       simulationTimestamp?: number,
     },
   ): Promise<FlashbotsPrivateTransaction> {
+    const startBlockNumberPromise = this.genericProvider.getBlockNumber()
+
     let signedTransaction: string;
     if ("signedTransaction" in transaction) {
       signedTransaction = transaction.signedTransaction
     } else {
       signedTransaction = await transaction.signer.signTransaction(transaction.transaction)
     }
-    const startBlockNumberPromise = this.genericProvider.getBlockNumber()
+
     const params = {
       tx: signedTransaction,
       maxBlockNumber: opts?.maxBlockNumber,
@@ -394,6 +472,20 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     }
   }
 
+  /**
+   * Attempts to cancel a pending private transaction.
+   *
+   * **_Note_**: This function removes the transaction from the Flashbots
+   * bundler, but miners may still include it if they have received it already.
+   * @param txHash transaction hash corresponding to pending tx
+   * @returns true if transaction was cancelled successfully
+   *
+   * @example
+   * ```typescript
+   * const pendingTxHash = (await fbProvider.sendPrivateTransaction(tx)).transaction.hash
+   * const isTxCanceled = await fbProvider.cancelPrivateTransaction(pendingTxHash)
+   * ```
+   */
   public async cancelPrivateTransaction(txHash: string): Promise<boolean | RelayResponseError> {
     const params = {
       txHash,
@@ -412,6 +504,22 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     return true;
   }
 
+  /**
+   * Signs a Flashbots bundle with this provider's `authSigner` key.
+   * @param bundledTransactions
+   * @returns signed bundle
+   *
+   * @example
+   * ```typescript
+   * const bundle: Array<FlashbotsBundleRawTransaction> = [
+   *    {signedTransaction: "0x01010101010101010101010101"},
+   *    {signedTransaction: "0x01010101010101010101010102"},
+   * ]
+   * const signedBundle = await fbProvider.signBundle(bundle)
+   * const blockNum = await provider.getBlockNumber()
+   * const simResult = await fbProvider.simulate(signedBundle, blockNum + 1)
+   * ```
+   */
   public async signBundle(bundledTransactions: Array<FlashbotsBundleTransaction | FlashbotsBundleRawTransaction>): Promise<Array<string>> {
     const nonces: { [address: string]: BigNumber } = {}
     const signedTransactions = new Array<string>()
@@ -441,7 +549,13 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     return signedTransactions
   }
 
-  private waitForBlock(transactionAccountNonces: Array<TransactionAccountNonce>, targetBlockNumber: number, timeout: number) {
+  /**
+   * Watches for a specific block to see if a bundle was included in it.
+   * @param transactionAccountNonces bundle transactions
+   * @param targetBlockNumber block number to check for bundle inclusion
+   * @param timeout ms
+   */
+  private waitForBundleInclusion(transactionAccountNonces: Array<TransactionAccountNonce>, targetBlockNumber: number, timeout: number) {
     return new Promise<FlashbotsBundleResolution>((resolve, reject) => {
       let timer: NodeJS.Timer | null = null
       let done = false
@@ -507,6 +621,12 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     })
   }
 
+  /**
+   * Waits for a transaction to be included on-chain.
+   * @param transactionHash
+   * @param maxBlockNumber highest block number to check before stopping
+   * @param timeout ms
+   */
   private waitForTxInclusion(transactionHash: string, maxBlockNumber: number, timeout: number) {
     return new Promise<FlashbotsTransactionResolution>((resolve, reject) => {
       let timer: NodeJS.Timer | null = null
@@ -559,6 +679,9 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     })
   }
 
+  /**
+   * Gets stats for provider instance's `authSigner` address.
+   */
   public async getUserStats(): Promise<GetUserStatsResponse> {
     const blockDetails = await this.genericProvider.getBlock('latest')
     const evmBlockNumber = `0x${blockDetails.number.toString(16)}`
@@ -578,6 +701,11 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     return response.result
   }
 
+  /**
+   * Gets information about a specific bundle.
+   * @param bundleHash hash of bundle to investigate
+   * @param blockNumber block in which the bundle should be included
+   */
   public async getBundleStats(bundleHash: string, blockNumber: number): Promise<GetBundleStatsResponse> {
     const evmBlockNumber = `0x${blockNumber.toString(16)}`
 
@@ -596,6 +724,24 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     return response.result
   }
 
+  /**
+   * Simluates a bundle on a given block.
+   * @param signedBundledTransactions signed Flashbots bundle
+   * @param blockTag block tag to simulate against, can use "latest"
+   * @param stateBlockTag (optional) simulated block state tag
+   * @param blockTimestamp (optional) simulated timestamp
+   *
+   * @example
+   * ```typescript
+   * const bundle: Array<FlashbotsBundleRawTransaction> = [
+   *    {signedTransaction: "0x01010101010101010101010101"},
+   *    {signedTransaction: "0x01010101010101010101010102"},
+   * ]
+   * const signedBundle = await fbProvider.signBundle(bundle)
+   * const blockNum = await provider.getBlockNumber()
+   * const simResult = await fbProvider.simulate(signedBundle, blockNum + 1)
+   * ```
+   */
   public async simulate(
     signedBundledTransactions: Array<string>,
     blockTag: BlockTag,
@@ -696,6 +842,13 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     }
   }
 
+  /**
+   * Gets information about a conflicting bundle. Useful if you're competing
+   * for well-known MEV and want to know why your bundle didn't land.
+   * @param targetSignedBundledTransactions signed bundle
+   * @param targetBlockNumber block in which bundle should be included
+   * @returns conflict and gas price details
+   */
   public async getConflictingBundle(
     targetSignedBundledTransactions: Array<string>,
     targetBlockNumber: number
@@ -710,6 +863,13 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     }
   }
 
+  /**
+   * Gets information about a conflicting bundle. Useful if you're competing
+   * for well-known MEV and want to know why your bundle didn't land.
+   * @param targetSignedBundledTransactions signed bundle
+   * @param targetBlockNumber block in which bundle should be included
+   * @returns conflict details
+   */
   public async getConflictingBundleWithoutGasPricing(
     targetSignedBundledTransactions: Array<string>,
     targetBlockNumber: number
@@ -807,6 +967,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     }
   }
 
+  /** Gets information about a block from Flashbots blocks API. */
   public async fetchBlocksApi(blockNumber: number): Promise<BlocksApiResponse> {
     return fetchJson(`https://blocks.flashbots.net/v1/blocks?block_number=${blockNumber}`)
   }
