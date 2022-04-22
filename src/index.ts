@@ -608,6 +608,9 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
             return tx.raw
           }
           if (tx.v !== undefined && tx.r !== undefined && tx.s !== undefined) {
+            if (tx.type === 2) {
+              delete tx.gasPrice;
+            }
             return serialize(tx, {
               v: tx.v,
               r: tx.r,
