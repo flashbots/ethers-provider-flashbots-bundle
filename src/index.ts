@@ -66,6 +66,7 @@ export interface TransactionSimulationBase {
 export interface TransactionSimulationSuccess extends TransactionSimulationBase {
   value: string
   ethSentToCoinbase: string
+  coinbaseDiff: string
 }
 
 export interface TransactionSimulationRevert extends TransactionSimulationBase {
@@ -519,21 +520,25 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   ) {
     const bundleGasPricing = bundleTransactions.reduce(
       (acc, transactionDetail) => {
+        // see: https://blocks.flashbots.net/ and https://github.com/flashbots/ethers-provider-flashbots-bundle/issues/62
         const gasUsed = 'gas_used' in transactionDetail ? transactionDetail.gas_used : transactionDetail.gasUsed
-        const gasPricePaidBySearcher = BigNumber.from(
-          'gas_price' in transactionDetail ? transactionDetail.gas_price : transactionDetail.gasPrice
-        )
-        const priorityFeeReceivedByMiner = gasPricePaidBySearcher.sub(baseFee)
         const ethSentToCoinbase =
           'coinbase_transfer' in transactionDetail
             ? transactionDetail.coinbase_transfer
             : 'ethSentToCoinbase' in transactionDetail
             ? transactionDetail.ethSentToCoinbase
             : BigNumber.from(0)
+        const total_miner_reward = 
+          'total_miner_reward' in transactionDetail 
+            ? BigNumber.from(transactionDetail.total_miner_reward) 
+            : 'coinbaseDiff' in transactionDetail
+            ? BigNumber.from(transactionDetail.coinbaseDiff)
+            : BigNumber.from(0)
+        const priorityFeeReceivedByMiner = total_miner_reward.sub(ethSentToCoinbase) 
         return {
           gasUsed: acc.gasUsed + gasUsed,
-          gasFeesPaidBySearcher: acc.gasFeesPaidBySearcher.add(gasPricePaidBySearcher.mul(gasUsed)),
-          priorityFeesReceivedByMiner: acc.priorityFeesReceivedByMiner.add(priorityFeeReceivedByMiner.mul(gasUsed)),
+          gasFeesPaidBySearcher: acc.gasFeesPaidBySearcher.add(baseFee.mul(gasUsed).add(priorityFeeReceivedByMiner)),
+          priorityFeesReceivedByMiner: acc.priorityFeesReceivedByMiner.add(priorityFeeReceivedByMiner),
           ethSentToCoinbase: acc.ethSentToCoinbase.add(ethSentToCoinbase)
         }
       },
