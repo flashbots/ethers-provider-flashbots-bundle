@@ -8,11 +8,17 @@ import { serialize } from '@ethersproject/transactions'
 
 export const DEFAULT_FLASHBOTS_RELAY = 'https://relay.flashbots.net'
 export const BASE_FEE_MAX_CHANGE_DENOMINATOR = 8
+const PRIVATE_TX_WAIT_BLOCKS = 25 // # of blocks
 
 export enum FlashbotsBundleResolution {
   BundleIncluded,
   BlockPassedWithoutInclusion,
   AccountNonceTooHigh
+}
+
+export enum FlashbotsTransactionResolution {
+  TransactionIncluded,
+  TransactionDropped,
 }
 
 export enum FlashbotsBundleConflictType {
@@ -54,6 +60,13 @@ export interface FlashbotsTransactionResponse {
   bundleHash: string
 }
 
+export interface FlashbotsPrivateTransactionResponse {
+  transaction: TransactionAccountNonce
+  wait: () => Promise<FlashbotsTransactionResolution>
+  simulate: () => Promise<SimulationResponse>
+  receipts: () => Promise<Array<TransactionReceipt>>
+}
+
 export interface TransactionSimulationBase {
   txHash: string
   gasUsed: number
@@ -93,6 +106,8 @@ export interface SimulationResponseSuccess {
 export type SimulationResponse = SimulationResponseSuccess | RelayResponseError
 
 export type FlashbotsTransaction = FlashbotsTransactionResponse | RelayResponseError
+
+export type FlashbotsPrivateTransaction = FlashbotsPrivateTransactionResponse | RelayResponseError
 
 export interface GetUserStatsResponseSuccess {
   signing_address: string
@@ -282,7 +297,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       revertingTxHashes: opts?.revertingTxHashes
     }
 
-    const request = JSON.stringify(this.prepareBundleRequest('eth_sendBundle', [params]))
+    const request = JSON.stringify(this.prepareRelayRequest('eth_sendBundle', [params]))
     const response = await this.request(request)
     if (response.error !== undefined && response.error !== null) {
       return {
@@ -305,7 +320,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
 
     return {
       bundleTransactions,
-      wait: () => this.wait(bundleTransactions, targetBlockNumber, TIMEOUT_MS),
+      wait: () => this.waitForBlock(bundleTransactions, targetBlockNumber, TIMEOUT_MS),
       simulate: () =>
         this.simulate(
           bundleTransactions.map((tx) => tx.signedTransaction),
@@ -325,6 +340,76 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   ): Promise<FlashbotsTransaction> {
     const signedTransactions = await this.signBundle(bundledTransactions)
     return this.sendRawBundle(signedTransactions, targetBlockNumber, opts)
+  }
+
+  public async sendPrivateTransaction(
+    transaction: FlashbotsBundleTransaction | FlashbotsBundleRawTransaction,
+    opts?: {
+      maxBlockNumber?: number,
+      simulationTimestamp?: number,
+    },
+  ): Promise<FlashbotsPrivateTransaction> {
+    let signedTransaction: string;
+    if ("signedTransaction" in transaction) {
+      signedTransaction = transaction.signedTransaction
+    } else {
+      signedTransaction = await transaction.signer.signTransaction(transaction.transaction)
+    }
+    const startBlockNumberPromise = this.genericProvider.getBlockNumber()
+    const params = {
+      tx: signedTransaction,
+      maxBlockNumber: opts?.maxBlockNumber,
+    }
+    const request = JSON.stringify(this.prepareRelayRequest('eth_sendPrivateTransaction', [params]))
+    const response = await this.request(request)
+    if (response.error !== undefined && response.error !== null) {
+      return {
+        error: {
+          message: response.error.message,
+          code: response.error.code
+        }
+      }
+    }
+
+    const transactionDetails = ethers.utils.parseTransaction(signedTransaction)
+    const privateTransaction = {
+      signedTransaction: signedTransaction,
+      hash: ethers.utils.keccak256(signedTransaction),
+      account: transactionDetails.from || "0x0",
+      nonce: transactionDetails.nonce,
+    }
+    const startBlockNumber = await startBlockNumberPromise
+
+    return {
+      transaction: privateTransaction,
+      wait: () => this.waitForTxInclusion(privateTransaction.hash, opts?.maxBlockNumber || startBlockNumber + 25, TIMEOUT_MS),
+      simulate: () =>
+        this.simulate(
+          [privateTransaction.signedTransaction],
+          startBlockNumber,
+          undefined,
+          opts?.simulationTimestamp,
+        ),
+      receipts: () => this.fetchReceipts([privateTransaction]),
+    }
+  }
+
+  public async cancelPrivateTransaction(txHash: string): Promise<boolean | RelayResponseError> {
+    const params = {
+      txHash,
+    }
+    const request = JSON.stringify(this.prepareRelayRequest('eth_cancelPrivateTransaction', [params]))
+    const response = await this.request(request)
+    if (response.error !== undefined && response.error !== null) {
+      return {
+        error: {
+          message: response.error.message,
+          code: response.error.code
+        }
+      }
+    }
+
+    return true;
   }
 
   public async signBundle(bundledTransactions: Array<FlashbotsBundleTransaction | FlashbotsBundleRawTransaction>): Promise<Array<string>> {
@@ -356,7 +441,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     return signedTransactions
   }
 
-  private wait(transactionAccountNonces: Array<TransactionAccountNonce>, targetBlockNumber: number, timeout: number) {
+  private waitForBlock(transactionAccountNonces: Array<TransactionAccountNonce>, targetBlockNumber: number, timeout: number) {
     return new Promise<FlashbotsBundleResolution>((resolve, reject) => {
       let timer: NodeJS.Timer | null = null
       let done = false
@@ -400,7 +485,6 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
           return
         }
         done = true
-
         this.genericProvider.removeListener('block', handler)
       }
       this.genericProvider.on('block', handler)
@@ -423,12 +507,64 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     })
   }
 
+  private waitForTxInclusion(transactionHash: string, maxBlockNumber: number, timeout: number) {
+    return new Promise<FlashbotsTransactionResolution>((resolve, reject) => {
+      let timer: NodeJS.Timer | null = null
+      let done = false
+
+      // runs on new block event
+      const handler = async (blockNumber: number) => {
+        if (blockNumber <= maxBlockNumber) {
+          // check tx status on mainnet
+          const sentTxStatus = await this.genericProvider.getTransaction(transactionHash)
+          if (sentTxStatus && sentTxStatus.confirmations >= 1) {
+            resolve(FlashbotsTransactionResolution.TransactionIncluded)
+          } else {
+            return
+          }
+        } else {
+          // tx not included in specified range, bail
+          this.genericProvider.removeListener('block', handler)
+          resolve(FlashbotsTransactionResolution.TransactionDropped)
+        }
+
+        if (timer) {
+          clearTimeout(timer)
+        }
+        if (done) {
+          return
+        }
+        done = true
+        this.genericProvider.removeListener('block', handler)
+      }
+
+      this.genericProvider.on('block', handler)
+
+      // time out if we've been trying for too long
+      if (timeout > 0) {
+        timer = setTimeout(() => {
+          if (done) {
+            return
+          }
+          timer = null
+          done = true
+
+          this.genericProvider.removeListener('block', handler)
+          reject('Timed out')
+        }, timeout)
+        if (timer.unref) {
+          timer.unref()
+        }
+      }
+    })
+  }
+
   public async getUserStats(): Promise<GetUserStatsResponse> {
     const blockDetails = await this.genericProvider.getBlock('latest')
     const evmBlockNumber = `0x${blockDetails.number.toString(16)}`
 
     const params = [evmBlockNumber]
-    const request = JSON.stringify(this.prepareBundleRequest('flashbots_getUserStats', params))
+    const request = JSON.stringify(this.prepareRelayRequest('flashbots_getUserStats', params))
     const response = await this.request(request)
     if (response.error !== undefined && response.error !== null) {
       return {
@@ -446,7 +582,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     const evmBlockNumber = `0x${blockNumber.toString(16)}`
 
     const params = [{ bundleHash, blockNumber: evmBlockNumber }]
-    const request = JSON.stringify(this.prepareBundleRequest('flashbots_getBundleStats', params))
+    const request = JSON.stringify(this.prepareRelayRequest('flashbots_getBundleStats', params))
     const response = await this.request(request)
     if (response.error !== undefined && response.error !== null) {
       return {
@@ -492,7 +628,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
         timestamp: blockTimestamp
       }
     ]
-    const request = JSON.stringify(this.prepareBundleRequest('eth_callBundle', params))
+    const request = JSON.stringify(this.prepareRelayRequest('eth_callBundle', params))
     const response = await this.request(request)
     if (response.error !== undefined && response.error !== null) {
       return {
@@ -691,8 +827,8 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     return Promise.all(bundledTransactions.map((bundledTransaction) => this.genericProvider.getTransactionReceipt(bundledTransaction.hash)))
   }
 
-  private prepareBundleRequest(
-    method: 'eth_callBundle' | 'eth_sendBundle' | 'flashbots_getUserStats' | 'flashbots_getBundleStats',
+  private prepareRelayRequest(
+    method: 'eth_callBundle' | 'eth_sendBundle' | 'eth_sendPrivateTransaction' | 'eth_cancelPrivateTransaction' | 'flashbots_getUserStats' | 'flashbots_getBundleStats',
     params: RpcParams
   ) {
     return {
