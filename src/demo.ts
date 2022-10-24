@@ -29,6 +29,16 @@ async function main() {
   const wallet = new Wallet(process.env.PRIVATE_KEY || '', provider)
   const flashbotsProvider = await FlashbotsBundleProvider.create(provider, authSigner, FLASHBOTS_EP)
 
+  const userStats = flashbotsProvider.getUserStats()
+  if (process.env.TEST_V2) {
+    try {
+      const userStats2 = await flashbotsProvider.getUserStatsV2()
+      console.log(userStats2)
+    } catch (e) {
+      console.error('[v2 error]', e)
+    }
+  }
+
   const legacyTransaction = {
     to: wallet.address,
     gasPrice: LEGACY_GAS_PRICE,
@@ -90,7 +100,8 @@ async function main() {
     } else {
       console.log({
         bundleStats: await flashbotsProvider.getBundleStats(simulation.bundleHash, targetBlock),
-        userStats: await flashbotsProvider.getUserStats()
+        bundleStatsV2: process.env.TEST_V2 && (await flashbotsProvider.getBundleStatsV2(simulation.bundleHash, targetBlock)),
+        userStats: await userStats
       })
     }
   })
