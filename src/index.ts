@@ -151,6 +151,12 @@ export interface GetBundleStatsResponseSuccessV2 {
       timestamp: string
     }
   ]
+  sealedByBuildersAt: [
+    {
+      pubkey: string
+      timestamp: string
+    }
+  ]
 }
 
 export type GetBundleStatsResponse = GetBundleStatsResponseSuccess | RelayResponseError
