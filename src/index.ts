@@ -585,8 +585,8 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     const blockDetails = await this.genericProvider.getBlock('latest')
     const evmBlockNumber = `0x${blockDetails.number.toString(16)}`
     const params = [evmBlockNumber]
-    const request = JSON.stringify(this.prepareRelayRequest('flashbots_getUserStats', params))
-    const response = await this.request(request, 'v2')
+    const request = JSON.stringify(this.prepareRelayRequest('flashbots_getUserStats_v2', params))
+    const response = await this.request(request)
     if (response.error !== undefined && response.error !== null) {
       return {
         error: {
@@ -621,8 +621,8 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     const evmBlockNumber = `0x${blockNumber.toString(16)}`
 
     const params = [{ bundleHash, blockNumber: evmBlockNumber }]
-    const request = JSON.stringify(this.prepareRelayRequest('flashbots_getBundleStats', params))
-    const response = await this.request(request, 'v2')
+    const request = JSON.stringify(this.prepareRelayRequest('flashbots_getBundleStats_v2', params))
+    const response = await this.request(request)
     if (response.error !== undefined && response.error !== null) {
       return {
         error: {
@@ -853,13 +853,12 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     return fetchJson(`https://blocks.flashbots.net/v1/blocks?block_number=${blockNumber}`)
   }
 
-  private async request(request: string, version: 'v1' | 'v2' = 'v1') {
+  private async request(request: string) {
     const connectionInfo = { ...this.connectionInfo }
     connectionInfo.headers = {
       'X-Flashbots-Signature': `${await this.authSigner.getAddress()}:${await this.authSigner.signMessage(id(request))}`,
       ...this.connectionInfo.headers
     }
-    connectionInfo.url = version === 'v2' ? `${connectionInfo.url}v2` : connectionInfo.url
     return fetchJson(connectionInfo, request)
   }
 
@@ -874,7 +873,9 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       | 'eth_sendPrivateTransaction'
       | 'eth_cancelPrivateTransaction'
       | 'flashbots_getUserStats'
-      | 'flashbots_getBundleStats',
+      | 'flashbots_getBundleStats'
+      | 'flashbots_getUserStats_v2'
+      | 'flashbots_getBundleStats_v2',
     params: RpcParams
   ) {
     return {
