@@ -134,8 +134,8 @@ export type GetUserStatsResponseV2 = GetUserStatsResponseSuccessV2 | RelayRespon
 
 export interface GetBundleStatsResponseSuccess {
   isSimulated: boolean
-  isSentToMiners: string
-  isHighPriority: string
+  isSentToMiners: boolean
+  isHighPriority: boolean
   simulatedAt: string
   submittedAt: string
   sentToMinersAt: string
