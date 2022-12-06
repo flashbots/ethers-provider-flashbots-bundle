@@ -139,9 +139,22 @@ export interface GetBundleStatsResponseSuccess {
   simulatedAt: string
   submittedAt: string
   sentToMinersAt: string
+  consideredByBuildersAt: [
+    {
+      pubkey: string
+      timestamp: string
+    }
+  ]
+  sealedByBuildersAt: [
+    {
+      pubkey: string
+      timestamp: string
+    }
+  ]
 }
 
 export interface GetBundleStatsResponseSuccessV2 {
+  isSimulated: boolean
   isHighPriority: boolean
   simulatedAt: string
   receivedAt: string
@@ -591,7 +604,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     const blockDetails = await this.genericProvider.getBlock('latest')
     const evmBlockNumber = `0x${blockDetails.number.toString(16)}`
     const params = [evmBlockNumber]
-    const request = JSON.stringify(this.prepareRelayRequest('flashbots_getUserStats_v2', params))
+    const request = JSON.stringify(this.prepareRelayRequest('flashbots_getUserStatsV2', params))
     const response = await this.request(request)
     if (response.error !== undefined && response.error !== null) {
       return {
@@ -627,7 +640,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     const evmBlockNumber = `0x${blockNumber.toString(16)}`
 
     const params = [{ bundleHash, blockNumber: evmBlockNumber }]
-    const request = JSON.stringify(this.prepareRelayRequest('flashbots_getBundleStats_v2', params))
+    const request = JSON.stringify(this.prepareRelayRequest('flashbots_getBundleStatsV2', params))
     const response = await this.request(request)
     if (response.error !== undefined && response.error !== null) {
       return {
@@ -880,8 +893,8 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       | 'eth_cancelPrivateTransaction'
       | 'flashbots_getUserStats'
       | 'flashbots_getBundleStats'
-      | 'flashbots_getUserStats_v2'
-      | 'flashbots_getBundleStats_v2',
+      | 'flashbots_getUserStatsV2'
+      | 'flashbots_getBundleStatsV2',
     params: RpcParams
   ) {
     return {
