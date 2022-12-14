@@ -43,7 +43,7 @@ export interface FlashbotsOptions {
   minTimestamp?: number
   maxTimestamp?: number
   revertingTxHashes?: Array<string>
-  bidId?: string
+  replacementUuid?: string
 }
 
 export interface TransactionAccountNonce {
@@ -331,7 +331,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       minTimestamp: opts?.minTimestamp,
       maxTimestamp: opts?.maxTimestamp,
       revertingTxHashes: opts?.revertingTxHashes,
-      userUuid: opts?.bidId
+      replacementUuid: opts?.replacementUuid
     }
 
     const request = JSON.stringify(this.prepareRelayRequest('eth_sendBundle', [params]))
@@ -381,7 +381,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
 
   public async cancelBundles(bidId: string): Promise<FlashbotsCancelBidResponse> {
     const params = {
-      userUuid: bidId
+      replacementUuid: bidId
     }
 
     const request = JSON.stringify(this.prepareRelayRequest('eth_cancelBundle', [params]))
