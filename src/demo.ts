@@ -1,6 +1,7 @@
 import { BigNumber, providers, Wallet } from 'ethers'
 import { FlashbotsBundleProvider, FlashbotsBundleResolution } from './index'
 import { TransactionRequest } from '@ethersproject/abstract-provider'
+import { v4 as uuidv4 } from 'uuid'
 
 const FLASHBOTS_AUTH_KEY = process.env.FLASHBOTS_AUTH_KEY
 
@@ -49,6 +50,7 @@ async function main() {
 
   provider.on('block', async (blockNumber) => {
     const block = await provider.getBlock(blockNumber)
+    const bidId = uuidv4()
 
     let eip1559Transaction: TransactionRequest
     if (block.baseFeePerGas == null) {
@@ -81,6 +83,7 @@ async function main() {
     ])
     const targetBlock = blockNumber + BLOCKS_IN_THE_FUTURE
     const simulation = await flashbotsProvider.simulate(signedTransactions, targetBlock)
+
     // Using TypeScript discrimination
     if ('error' in simulation) {
       console.warn(`Simulation Error: ${simulation.error.message}`)
@@ -88,11 +91,16 @@ async function main() {
     } else {
       console.log(`Simulation Success: ${JSON.stringify(simulation, null, 2)}`)
     }
-    const bundleSubmission = await flashbotsProvider.sendRawBundle(signedTransactions, targetBlock)
+
+    const bundleSubmission = await flashbotsProvider.sendRawBundle(signedTransactions, targetBlock, { bidId })
     console.log('bundle submitted, waiting')
     if ('error' in bundleSubmission) {
       throw new Error(bundleSubmission.error.message)
     }
+
+    const cancelResult = await flashbotsProvider.cancelBundles(bidId)
+    console.log('cancel response', cancelResult)
+
     const waitResponse = await bundleSubmission.wait()
     console.log(`Wait Response: ${FlashbotsBundleResolution[waitResponse]}`)
     if (waitResponse === FlashbotsBundleResolution.BundleIncluded || waitResponse === FlashbotsBundleResolution.AccountNonceTooHigh) {

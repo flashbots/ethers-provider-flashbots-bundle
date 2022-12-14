@@ -43,6 +43,7 @@ export interface FlashbotsOptions {
   minTimestamp?: number
   maxTimestamp?: number
   revertingTxHashes?: Array<string>
+  bidId?: string
 }
 
 export interface TransactionAccountNonce {
@@ -225,6 +226,12 @@ export interface FlashbotsBundleConflictWithGasPricing extends FlashbotsBundleCo
   conflictingBundleGasPricing?: FlashbotsGasPricing
 }
 
+export interface FlashbotsCancelBidResponseSuccess {
+  bundleHashes: string[]
+}
+
+export type FlashbotsCancelBidResponse = FlashbotsCancelBidResponseSuccess | RelayResponseError
+
 type RpcParams = Array<string[] | string | number | Record<string, unknown>>
 
 const TIMEOUT_MS = 5 * 60 * 1000
@@ -323,7 +330,8 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       blockNumber: `0x${targetBlockNumber.toString(16)}`,
       minTimestamp: opts?.minTimestamp,
       maxTimestamp: opts?.maxTimestamp,
-      revertingTxHashes: opts?.revertingTxHashes
+      revertingTxHashes: opts?.revertingTxHashes,
+      userUuid: opts?.bidId
     }
 
     const request = JSON.stringify(this.prepareRelayRequest('eth_sendBundle', [params]))
@@ -369,6 +377,27 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   ): Promise<FlashbotsTransaction> {
     const signedTransactions = await this.signBundle(bundledTransactions)
     return this.sendRawBundle(signedTransactions, targetBlockNumber, opts)
+  }
+
+  public async cancelBundles(bidId: string): Promise<FlashbotsCancelBidResponse> {
+    const params = {
+      userUuid: bidId
+    }
+
+    const request = JSON.stringify(this.prepareRelayRequest('eth_cancelBundle', [params]))
+    const response = await this.request(request)
+
+    if (response.error !== undefined && response.error !== null) {
+      return {
+        error: {
+          message: response.error.message,
+          code: response.error.code
+        }
+      }
+    }
+    return {
+      bundleHashes: response.result
+    }
   }
 
   public async sendPrivateTransaction(
@@ -888,6 +917,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   private prepareRelayRequest(
     method:
       | 'eth_callBundle'
+      | 'eth_cancelBundle'
       | 'eth_sendBundle'
       | 'eth_sendPrivateTransaction'
       | 'eth_cancelPrivateTransaction'
