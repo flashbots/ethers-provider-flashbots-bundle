@@ -50,7 +50,7 @@ async function main() {
 
   provider.on('block', async (blockNumber) => {
     const block = await provider.getBlock(blockNumber)
-    const bidId = uuidv4()
+    const replacementUuid = uuidv4()
 
     let eip1559Transaction: TransactionRequest
     if (block.baseFeePerGas == null) {
@@ -92,13 +92,13 @@ async function main() {
       console.log(`Simulation Success: ${JSON.stringify(simulation, null, 2)}`)
     }
 
-    const bundleSubmission = await flashbotsProvider.sendRawBundle(signedTransactions, targetBlock, { bidId })
+    const bundleSubmission = await flashbotsProvider.sendRawBundle(signedTransactions, targetBlock, { replacementUuid })
     console.log('bundle submitted, waiting')
     if ('error' in bundleSubmission) {
       throw new Error(bundleSubmission.error.message)
     }
 
-    const cancelResult = await flashbotsProvider.cancelBundles(bidId)
+    const cancelResult = await flashbotsProvider.cancelBundles(replacementUuid)
     console.log('cancel response', cancelResult)
 
     const waitResponse = await bundleSubmission.wait()
