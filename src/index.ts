@@ -74,6 +74,7 @@ export interface TransactionSimulationBase {
   gasPrice: string
   toAddress: string
   fromAddress: string
+  coinbaseDiff: string
 }
 
 export interface TransactionSimulationSuccess extends TransactionSimulationBase {
@@ -96,10 +97,14 @@ export interface RelayResponseError {
 }
 
 export interface SimulationResponseSuccess {
+  bundleGasPrice: BigNumber
   bundleHash: string
   coinbaseDiff: BigNumber
+  ethSentToCoinbase: BigNumber
+  gasFees: BigNumber
   results: Array<TransactionSimulation>
   totalGasUsed: number
+  stateBlockNumber: number
   firstRevert?: TransactionSimulation
 }
 
@@ -712,9 +717,13 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
 
     const callResult = response.result
     return {
+      bundleGasPrice: BigNumber.from(callResult.bundleGasPrice),
       bundleHash: callResult.bundleHash,
       coinbaseDiff: BigNumber.from(callResult.coinbaseDiff),
+      ethSentToCoinbase: BigNumber.from(callResult.ethSentToCoinbase),
+      gasFees: BigNumber.from(callResult.gasFees),
       results: callResult.results,
+      stateBlockNumber: callResult.stateBlockNumber,
       totalGasUsed: callResult.results.reduce((a: number, b: TransactionSimulation) => a + b.gasUsed, 0),
       firstRevert: callResult.results.find((txSim: TransactionSimulation) => 'revert' in txSim || 'error' in txSim)
     }
