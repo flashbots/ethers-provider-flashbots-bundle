@@ -168,7 +168,7 @@ export type GetBundleStatsResponseV2 = GetBundleStatsResponseSuccessV2 | RelayRe
 interface BlocksApiResponseTransactionDetails {
   transaction_hash: string
   tx_index: number
-  bundle_type: 'rogue' | 'flashbots'
+  bundle_type: 'rogue' | 'flashbots' | 'mempool'
   bundle_index: number
   block_number: number
   eoa_address: string
@@ -176,14 +176,19 @@ interface BlocksApiResponseTransactionDetails {
   gas_used: number
   gas_price: string
   coinbase_transfer: string
+  eth_sent_to_fee_recipient: string
   total_miner_reward: string
+  fee_recipient_eth_diff: string
 }
 
 interface BlocksApiResponseBlockDetails {
   block_number: number
+  fee_recipient: string
+  fee_recipient_eth_diff: string
   miner_reward: string
   miner: string
   coinbase_transfers: string
+  eth_sent_to_fee_recipient: string
   gas_used: number
   gas_price: string
   transactions: Array<BlocksApiResponseTransactionDetails>
