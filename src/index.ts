@@ -132,6 +132,11 @@ export interface GetUserStatsResponseSuccessV2 {
 export type GetUserStatsResponse = GetUserStatsResponseSuccess | RelayResponseError
 export type GetUserStatsResponseV2 = GetUserStatsResponseSuccessV2 | RelayResponseError
 
+interface PubKeyTimestamp {
+    pubkey: string
+    timestamp: string
+}
+
 export interface GetBundleStatsResponseSuccess {
   isSimulated: boolean
   isSentToMiners: boolean
@@ -139,18 +144,8 @@ export interface GetBundleStatsResponseSuccess {
   simulatedAt: string
   submittedAt: string
   sentToMinersAt: string
-  consideredByBuildersAt: [
-    {
-      pubkey: string
-      timestamp: string
-    }
-  ]
-  sealedByBuildersAt: [
-    {
-      pubkey: string
-      timestamp: string
-    }
-  ]
+  consideredByBuildersAt: Array<PubKeyTimestamp>
+  sealedByBuildersAt: Array<PubKeyTimestamp>
 }
 
 export interface GetBundleStatsResponseSuccessV2 {
@@ -158,18 +153,8 @@ export interface GetBundleStatsResponseSuccessV2 {
   isHighPriority: boolean
   simulatedAt: string
   receivedAt: string
-  consideredByBuildersAt: [
-    {
-      pubkey: string
-      timestamp: string
-    }
-  ]
-  sealedByBuildersAt: [
-    {
-      pubkey: string
-      timestamp: string
-    }
-  ]
+  consideredByBuildersAt: Array<PubKeyTimestamp>
+  sealedByBuildersAt: Array<PubKeyTimestamp>
 }
 
 export type GetBundleStatsResponse = GetBundleStatsResponseSuccess | RelayResponseError
