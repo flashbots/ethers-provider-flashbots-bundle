@@ -8,7 +8,6 @@ import { serialize } from '@ethersproject/transactions'
 
 export const DEFAULT_FLASHBOTS_RELAY = 'https://relay.flashbots.net'
 export const BASE_FEE_MAX_CHANGE_DENOMINATOR = 8
-const PRIVATE_TX_WAIT_BLOCKS = 25 // # of blocks
 
 export enum FlashbotsBundleResolution {
   BundleIncluded,
@@ -75,6 +74,7 @@ export interface TransactionSimulationBase {
   gasPrice: string
   toAddress: string
   fromAddress: string
+  coinbaseDiff: string
 }
 
 export interface TransactionSimulationSuccess extends TransactionSimulationBase {
@@ -97,10 +97,14 @@ export interface RelayResponseError {
 }
 
 export interface SimulationResponseSuccess {
+  bundleGasPrice: BigNumber
   bundleHash: string
   coinbaseDiff: BigNumber
+  ethSentToCoinbase: BigNumber
+  gasFees: BigNumber
   results: Array<TransactionSimulation>
   totalGasUsed: number
+  stateBlockNumber: number
   firstRevert?: TransactionSimulation
 }
 
@@ -133,6 +137,11 @@ export interface GetUserStatsResponseSuccessV2 {
 export type GetUserStatsResponse = GetUserStatsResponseSuccess | RelayResponseError
 export type GetUserStatsResponseV2 = GetUserStatsResponseSuccessV2 | RelayResponseError
 
+interface PubKeyTimestamp {
+  pubkey: string
+  timestamp: string
+}
+
 export interface GetBundleStatsResponseSuccess {
   isSimulated: boolean
   isSentToMiners: boolean
@@ -140,18 +149,8 @@ export interface GetBundleStatsResponseSuccess {
   simulatedAt: string
   submittedAt: string
   sentToMinersAt: string
-  consideredByBuildersAt: [
-    {
-      pubkey: string
-      timestamp: string
-    }
-  ]
-  sealedByBuildersAt: [
-    {
-      pubkey: string
-      timestamp: string
-    }
-  ]
+  consideredByBuildersAt: Array<PubKeyTimestamp>
+  sealedByBuildersAt: Array<PubKeyTimestamp>
 }
 
 export interface GetBundleStatsResponseSuccessV2 {
@@ -159,18 +158,8 @@ export interface GetBundleStatsResponseSuccessV2 {
   isHighPriority: boolean
   simulatedAt: string
   receivedAt: string
-  consideredByBuildersAt: [
-    {
-      pubkey: string
-      timestamp: string
-    }
-  ]
-  sealedByBuildersAt: [
-    {
-      pubkey: string
-      timestamp: string
-    }
-  ]
+  consideredByBuildersAt: Array<PubKeyTimestamp>
+  sealedByBuildersAt: Array<PubKeyTimestamp>
 }
 
 export type GetBundleStatsResponse = GetBundleStatsResponseSuccess | RelayResponseError
@@ -179,7 +168,7 @@ export type GetBundleStatsResponseV2 = GetBundleStatsResponseSuccessV2 | RelayRe
 interface BlocksApiResponseTransactionDetails {
   transaction_hash: string
   tx_index: number
-  bundle_type: 'rogue' | 'flashbots'
+  bundle_type: 'rogue' | 'flashbots' | 'mempool'
   bundle_index: number
   block_number: number
   eoa_address: string
@@ -187,14 +176,19 @@ interface BlocksApiResponseTransactionDetails {
   gas_used: number
   gas_price: string
   coinbase_transfer: string
+  eth_sent_to_fee_recipient: string
   total_miner_reward: string
+  fee_recipient_eth_diff: string
 }
 
 interface BlocksApiResponseBlockDetails {
   block_number: number
+  fee_recipient: string
+  fee_recipient_eth_diff: string
   miner_reward: string
   miner: string
   coinbase_transfers: string
+  eth_sent_to_fee_recipient: string
   gas_used: number
   gas_price: string
   transactions: Array<BlocksApiResponseTransactionDetails>
@@ -541,7 +535,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       }
       this.genericProvider.on('block', handler)
 
-      if (typeof timeout === 'number' && timeout > 0) {
+      if (timeout > 0) {
         timer = setTimeout(() => {
           if (done) {
             return
@@ -728,9 +722,13 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
 
     const callResult = response.result
     return {
+      bundleGasPrice: BigNumber.from(callResult.bundleGasPrice),
       bundleHash: callResult.bundleHash,
       coinbaseDiff: BigNumber.from(callResult.coinbaseDiff),
+      ethSentToCoinbase: BigNumber.from(callResult.ethSentToCoinbase),
+      gasFees: BigNumber.from(callResult.gasFees),
       results: callResult.results,
+      stateBlockNumber: callResult.stateBlockNumber,
       totalGasUsed: callResult.results.reduce((a: number, b: TransactionSimulation) => a + b.gasUsed, 0),
       firstRevert: callResult.results.find((txSim: TransactionSimulation) => 'revert' in txSim || 'error' in txSim)
     }
