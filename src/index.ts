@@ -133,8 +133,8 @@ export type GetUserStatsResponse = GetUserStatsResponseSuccess | RelayResponseEr
 export type GetUserStatsResponseV2 = GetUserStatsResponseSuccessV2 | RelayResponseError
 
 interface PubKeyTimestamp {
-    pubkey: string
-    timestamp: string
+  pubkey: string
+  timestamp: string
 }
 
 export interface GetBundleStatsResponseSuccess {
@@ -525,7 +525,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       }
       this.genericProvider.on('block', handler)
 
-      if (typeof timeout === 'number' && timeout > 0) {
+      if (timeout > 0) {
         timer = setTimeout(() => {
           if (done) {
             return
