@@ -8,7 +8,6 @@ import { serialize } from '@ethersproject/transactions'
 
 export const DEFAULT_FLASHBOTS_RELAY = 'https://relay.flashbots.net'
 export const BASE_FEE_MAX_CHANGE_DENOMINATOR = 8
-const PRIVATE_TX_WAIT_BLOCKS = 25 // # of blocks
 
 export enum FlashbotsBundleResolution {
   BundleIncluded,
