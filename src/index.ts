@@ -608,7 +608,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   public async getUserStats(): Promise<GetUserStatsResponse> {
     const blockDetails = await this.genericProvider.getBlock('latest')
     const evmBlockNumber = `0x${blockDetails.number.toString(16)}`
-    const params = [evmBlockNumber]
+    const params = [{ blockNumber: evmBlockNumber }]
     const request = JSON.stringify(this.prepareRelayRequest('flashbots_getUserStats', params))
     const response = await this.request(request)
     if (response.error !== undefined && response.error !== null) {
