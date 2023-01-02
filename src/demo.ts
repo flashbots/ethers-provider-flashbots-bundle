@@ -34,7 +34,7 @@ async function main() {
   if (process.env.TEST_V2) {
     try {
       const userStats2 = await flashbotsProvider.getUserStatsV2()
-      console.log(userStats2)
+      console.log('userStatsV2', userStats2)
     } catch (e) {
       console.error('[v2 error]', e)
     }
