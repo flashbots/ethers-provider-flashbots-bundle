@@ -25,6 +25,16 @@ const provider = new providers.InfuraProvider(CHAIN_ID, process.env.INFURA_API_K
 const FLASHBOTS_EP = 'https://relay-goerli.flashbots.net/'
 // ===== Uncomment this for Goerli =======
 
+for (const e of ['FLASHBOTS_AUTH_KEY', 'INFURA_API_KEY', 'ETHEREUM_RPC_URL', 'PRIVATE_KEY']) {
+  if (!process.env[e]) {
+    // don't warn for skipping ETHEREUM_RPC_URL if using goerli
+    if (FLASHBOTS_EP && FLASHBOTS_EP.includes('goerli') && e === 'ETHEREUM_RPC_URL') {
+      continue
+    }
+    console.warn(`${e} should be defined as an environment variable`)
+  }
+}
+
 async function main() {
   const authSigner = FLASHBOTS_AUTH_KEY ? new Wallet(FLASHBOTS_AUTH_KEY) : Wallet.createRandom()
   const wallet = new Wallet(process.env.PRIVATE_KEY || '', provider)
@@ -34,7 +44,7 @@ async function main() {
   if (process.env.TEST_V2) {
     try {
       const userStats2 = await flashbotsProvider.getUserStatsV2()
-      console.log(userStats2)
+      console.log('userStatsV2', userStats2)
     } catch (e) {
       console.error('[v2 error]', e)
     }
