@@ -55,7 +55,8 @@ async function main() {
     gasPrice: LEGACY_GAS_PRICE,
     gasLimit: 21000,
     data: '0x',
-    nonce: await provider.getTransactionCount(wallet.address)
+    nonce: await provider.getTransactionCount(wallet.address),
+    chainId: CHAIN_ID
   }
 
   provider.on('block', async (blockNumber) => {
