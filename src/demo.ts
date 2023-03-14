@@ -16,7 +16,7 @@ const BLOCKS_IN_THE_FUTURE = 2
 //   { url: process.env.ETHEREUM_RPC_URL || 'http://127.0.0.1:8545' },
 //   { chainId: CHAIN_ID, ensAddress: '', name: 'mainnet' }
 // )
-// const FLASHBOTS_EP = undefined;
+// const FLASHBOTS_EP = 'https://relay.flashbots.net/'
 // ===== Uncomment this for mainnet =======
 
 // ===== Uncomment this for Goerli =======
