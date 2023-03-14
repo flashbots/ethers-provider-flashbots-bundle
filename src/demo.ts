@@ -28,7 +28,7 @@ const FLASHBOTS_EP = 'https://relay-goerli.flashbots.net/'
 for (const e of ['FLASHBOTS_AUTH_KEY', 'INFURA_API_KEY', 'ETHEREUM_RPC_URL', 'PRIVATE_KEY']) {
   if (!process.env[e]) {
     // don't warn for skipping ETHEREUM_RPC_URL if using goerli
-    if (FLASHBOTS_EP && FLASHBOTS_EP.includes('goerli') && e === 'ETHEREUM_RPC_URL') {
+    if (FLASHBOTS_EP.includes('goerli') && e === 'ETHEREUM_RPC_URL') {
       continue
     }
     console.warn(`${e} should be defined as an environment variable`)
