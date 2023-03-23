@@ -253,7 +253,6 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
    * @param authSigner account to sign bundles
    * @param connectionInfoOrUrl (optional) connection settings
    * @param network (optional) network settings
-   * @returns Flashbots provider, connected to the Flashbots Relay
    *
    * @example
    * ```typescript
@@ -318,7 +317,6 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
    * @param currentBaseFeePerGas base fee of current block (wei)
    * @param currentGasUsed gas used by tx in simulation
    * @param currentGasLimit gas limit of transaction
-   * @returns adjusted base fee
    */
   static getBaseFeeInNextBlock(currentBaseFeePerGas: BigNumber, currentGasUsed: BigNumber, currentGasLimit: BigNumber): BigNumber {
     const currentGasTarget = currentGasLimit.div(2)
@@ -352,13 +350,13 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
    * @param signedBundledTransactions array of raw signed transactions
    * @param targetBlockNumber block to target for bundle inclusion
    * @param opts (optional) settings
-   * @returns callbacks for handling results, and the bundle's hash
+   * @returns callbacks for handling results, and the bundle hash
    *
    * @example
    * ```typescript
    * const bundle: Array<FlashbotsBundleRawTransaction> = [
-   *    {signedTransaction: "0x01010101010101010101010101"},
-   *    {signedTransaction: "0x01010101010101010101010102"},
+   *    {signedTransaction: "0x02..."},
+   *    {signedTransaction: "0x02..."},
    * ]
    * const signedBundle = await fbProvider.signBundle(bundle)
    * const blockNum = await provider.getBlockNumber()
@@ -421,7 +419,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
    * @param bundledTransactions array of transactions, either signed or provided with a signer.
    * @param targetBlockNumber block to target for bundle inclusion
    * @param opts (optional) settings
-   * @returns callbacks for handling results, and the bundle's hash
+   * @returns callbacks for handling results, and the bundle hash
    */
   public async sendBundle(
     bundledTransactions: Array<FlashbotsBundleTransaction | FlashbotsBundleRawTransaction>,
@@ -465,7 +463,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
    *
    * @example
    * ```typescript
-   * const tx: FlashbotsBundleRawTransaction = {signedTransaction: "0x01010101010101010101010101"}
+   * const tx: FlashbotsBundleRawTransaction = {signedTransaction: "0x02..."}
    * const blockNum = await provider.getBlockNumber()
    * // try sending for 5 blocks
    * const response = await fbProvider.sendPrivateTransaction(tx, {maxBlockNumber: blockNum + 5})
@@ -560,8 +558,8 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
    * @example
    * ```typescript
    * const bundle: Array<FlashbotsBundleRawTransaction> = [
-   *    {signedTransaction: "0x01010101010101010101010101"},
-   *    {signedTransaction: "0x01010101010101010101010102"},
+   *    {signedTransaction: "0x02..."},
+   *    {signedTransaction: "0x02..."},
    * ]
    * const signedBundle = await fbProvider.signBundle(bundle)
    * const blockNum = await provider.getBlockNumber()
@@ -827,8 +825,8 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
    * @example
    * ```typescript
    * const bundle: Array<FlashbotsBundleRawTransaction> = [
-   *    {signedTransaction: "0x01010101010101010101010101"},
-   *    {signedTransaction: "0x01010101010101010101010102"},
+   *    {signedTransaction: "0x1..."},
+   *    {signedTransaction: "0x2..."},
    * ]
    * const signedBundle = await fbProvider.signBundle(bundle)
    * const blockNum = await provider.getBlockNumber()
