@@ -301,7 +301,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   }
 
   /**
-   * Calculates maximum base fee in future block.
+   * Calculates maximum base fee in a future block.
    * @param baseFee current base fee
    * @param blocksInFuture number of blocks in the future
    */
@@ -314,9 +314,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   }
 
   /**
-   * Calculates an optimal base fee for inclusion in the next block.
-   * Useful when a bundle is not landing, but simulation is passing.
-   * //TODO: Verify my assessment. I'm not sure it's accurate...
+   * Calculates base fee for the next block.
    * @param currentBaseFeePerGas base fee of current block (wei)
    * @param currentGasUsed gas used by tx in simulation
    * @param currentGasLimit gas limit of transaction
