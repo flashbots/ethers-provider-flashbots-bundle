@@ -1,13 +1,12 @@
-import { BigNumber, providers, Wallet } from 'ethers'
-import { FlashbotsBundleProvider, FlashbotsBundleResolution } from './index'
-import { TransactionRequest } from '@ethersproject/abstract-provider'
+import { InfuraProvider, Wallet, TransactionRequest } from 'ethers'
 import { v4 as uuidv4 } from 'uuid'
+import { FlashbotsBundleProvider, FlashbotsBundleResolution } from './index'
 
 const FLASHBOTS_AUTH_KEY = process.env.FLASHBOTS_AUTH_KEY
 
-const GWEI = BigNumber.from(10).pow(9)
-const PRIORITY_FEE = GWEI.mul(3)
-const LEGACY_GAS_PRICE = GWEI.mul(12)
+const GWEI = 10n ** 9n
+const PRIORITY_FEE = GWEI * 3n
+const LEGACY_GAS_PRICE = GWEI * 12n
 const BLOCKS_IN_THE_FUTURE = 2
 
 // ===== Uncomment this for mainnet =======
@@ -21,7 +20,7 @@ const BLOCKS_IN_THE_FUTURE = 2
 
 // ===== Uncomment this for Goerli =======
 const CHAIN_ID = 5
-const provider = new providers.InfuraProvider(CHAIN_ID, process.env.INFURA_API_KEY)
+const provider = new InfuraProvider(CHAIN_ID, process.env.INFURA_API_KEY)
 const FLASHBOTS_EP = 'https://relay-goerli.flashbots.net/'
 // ===== Uncomment this for Goerli =======
 
@@ -33,6 +32,14 @@ for (const e of ['FLASHBOTS_AUTH_KEY', 'INFURA_API_KEY', 'ETHEREUM_RPC_URL', 'PR
     }
     console.warn(`${e} should be defined as an environment variable`)
   }
+}
+
+function bigIntReplacer(key: string, value: any) {
+  if (typeof value === 'bigint') {
+    // Convert the BigInt to a string and wrap it with a custom identifier
+    return `BigInt(${value.toString()})`
+  }
+  return value
 }
 
 async function main() {
@@ -61,6 +68,9 @@ async function main() {
 
   provider.on('block', async (blockNumber) => {
     const block = await provider.getBlock(blockNumber)
+    if (block === null) {
+      throw new Error(`Unable to get block: ${blockNumber}`)
+    }
     const replacementUuid = uuidv4()
 
     let eip1559Transaction: TransactionRequest
@@ -74,7 +84,7 @@ async function main() {
       eip1559Transaction = {
         to: wallet.address,
         type: 2,
-        maxFeePerGas: PRIORITY_FEE.add(maxBaseFeeInFutureBlock),
+        maxFeePerGas: PRIORITY_FEE + maxBaseFeeInFutureBlock,
         maxPriorityFeePerGas: PRIORITY_FEE,
         gasLimit: 21000,
         data: '0x',
@@ -100,7 +110,7 @@ async function main() {
       console.warn(`Simulation Error: ${simulation.error.message}`)
       process.exit(1)
     } else {
-      console.log(`Simulation Success: ${JSON.stringify(simulation, null, 2)}`)
+      console.log(`Simulation Success: ${JSON.stringify(simulation, bigIntReplacer, 2)}`)
     }
 
     const bundleSubmission = await flashbotsProvider.sendRawBundle(signedTransactions, targetBlock, { replacementUuid })
