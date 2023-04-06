@@ -1,5 +1,5 @@
-import { AbstractProvider } from 'ethers'
 import {
+  AbstractProvider,
   BlockTag,
   TransactionReceipt,
   TransactionRequest,
