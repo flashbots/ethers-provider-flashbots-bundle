@@ -1084,17 +1084,24 @@ export class FlashbotsBundleProvider extends AbstractProvider {
   public async fetchBlocksApi(blockNumber: number): Promise<BlocksApiResponse> {
     const request = new FetchRequest(`${BLOCK_API}?block_number=${blockNumber}`)
     const resp = await request.send()
-    resp.assertOk()
+    try {
+      resp.assertOk()
+    } catch (err) {
+      throw new Error(`Request failed with status ${resp.statusCode} (URL: ${request.url}): ${resp.bodyText}`)
+    }
     return resp.bodyJson
   }
 
   private async request(body: string) {
-    // NOTE: Should we call this.send instead of this method and override _send to set the header?
     const request = this.#connect.clone()
     request.setHeader('X-Flashbots-Signature', `${await this.authSigner.getAddress()}:${await this.authSigner.signMessage(id(body))}`)
     request.body = body
     const resp = await request.send()
-    resp.assertOk()
+    try {
+      resp.assertOk()
+    } catch (err) {
+      throw new Error(`Request failed with status ${resp.statusCode} (URL: ${request.url}): ${resp.bodyText}`)
+    }
     return resp.bodyJson
   }
 
