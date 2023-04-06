@@ -1006,7 +1006,7 @@ export class FlashbotsBundleProvider extends AbstractProvider {
     }
     const bundleTransactions = blockDetails.transactions
     const bundleCount = bundleTransactions[bundleTransactions.length - 1].bundle_index + 1
-    const signedPriorBundleTransactions = []
+    const signedPriorBundleTransactions: string[] = []
     for (let currentBundleId = 0; currentBundleId < bundleCount; currentBundleId++) {
       const currentBundleTransactions = bundleTransactions.filter((bundleTransaction) => bundleTransaction.bundle_index === currentBundleId)
       const currentBundleSignedTxs = await Promise.all(
