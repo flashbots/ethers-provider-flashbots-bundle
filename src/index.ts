@@ -1094,6 +1094,7 @@ export class FlashbotsBundleProvider extends AbstractProvider {
 
   private async request(body: string) {
     const request = this.#connect.clone()
+    request.setHeader('Content-Type', 'application/json')
     request.setHeader('X-Flashbots-Signature', `${await this.authSigner.getAddress()}:${await this.authSigner.signMessage(id(body))}`)
     request.body = body
     const resp = await request.send()
@@ -1128,8 +1129,8 @@ export class FlashbotsBundleProvider extends AbstractProvider {
     params: RpcParams
   ) {
     return {
-      method: method,
-      params: params,
+      method,
+      params,
       id: this.#nextId++,
       jsonrpc: '2.0'
     }
