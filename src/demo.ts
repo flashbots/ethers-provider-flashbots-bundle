@@ -34,6 +34,7 @@ for (const e of ['FLASHBOTS_AUTH_KEY', 'INFURA_API_KEY', 'ETHEREUM_RPC_URL', 'PR
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function bigIntReplacer(key: string, value: any) {
   if (typeof value === 'bigint') {
     // Convert the BigInt to a string and wrap it with a custom identifier
