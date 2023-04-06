@@ -1,3 +1,4 @@
+import { AbstractProvider } from 'ethers'
 import {
   BlockTag,
   TransactionReceipt,
@@ -8,13 +9,13 @@ import {
   id,
   keccak256,
   Transaction,
-  JsonRpcProvider,
   Network,
   FetchRequest
 } from 'ethers'
 
 export const DEFAULT_FLASHBOTS_RELAY = 'https://relay.flashbots.net'
-export const BASE_FEE_MAX_CHANGE_DENOMINATOR = 8
+export const BASE_FEE_MAX_CHANGE_DENOMINATOR = 8n
+export const BLOCK_API = 'https://blocks.flashbots.net/v1/blocks'
 
 export enum FlashbotsBundleResolution {
   BundleIncluded,
@@ -238,25 +239,21 @@ type RpcParams = Array<string[] | string | number | Record<string, unknown>>
 
 const TIMEOUT_MS = 5 * 60 * 1000
 
-export class FlashbotsBundleProvider extends JsonRpcProvider {
+export class FlashbotsBundleProvider extends AbstractProvider {
   private genericProvider: Provider
   private authSigner: Signer
-  private relayConnection: FetchRequest
-  private nextId: number
+
+  #connect: FetchRequest
+  #nextId: number
 
   constructor(genericProvider: Provider, authSigner: Signer, url: string | FetchRequest, network: Networkish) {
-    super(url, network)
+    super(network)
 
     this.genericProvider = genericProvider
     this.authSigner = authSigner
 
-    if (typeof url === 'string') {
-      this.relayConnection = new FetchRequest(url)
-    } else {
-      this.relayConnection = url.clone()
-    }
-
-    this.nextId = 1
+    this.#connect = typeof url === 'string' ? new FetchRequest(url) : url.clone()
+    this.#nextId = 1
   }
 
   static async throttleCallback(): Promise<boolean> {
@@ -286,9 +283,9 @@ export class FlashbotsBundleProvider extends JsonRpcProvider {
     url?: string | FetchRequest,
     network?: Networkish
   ): Promise<FlashbotsBundleProvider> {
-    const relayConnection: FetchRequest =
+    const connect: FetchRequest =
       typeof url === 'string' || url === undefined ? new FetchRequest(url ?? DEFAULT_FLASHBOTS_RELAY) : url.clone()
-    relayConnection.retryFunc = FlashbotsBundleProvider.throttleCallback
+    connect.retryFunc = FlashbotsBundleProvider.throttleCallback
     const networkish = new Network('', 0n)
     if (typeof network === 'string') {
       networkish.name = network
@@ -307,7 +304,7 @@ export class FlashbotsBundleProvider extends JsonRpcProvider {
       networkish.chainId = (await genericProvider.getNetwork()).chainId
     }
 
-    return new FlashbotsBundleProvider(genericProvider, authSigner, relayConnection, networkish)
+    return new FlashbotsBundleProvider(genericProvider, authSigner, connect, networkish)
   }
 
   /**
@@ -336,12 +333,12 @@ export class FlashbotsBundleProvider extends JsonRpcProvider {
       return currentBaseFeePerGas
     } else if (currentGasUsed > currentGasTarget) {
       const gasUsedDelta = currentGasUsed - currentGasTarget
-      const baseFeePerGasDelta = (currentBaseFeePerGas * gasUsedDelta) / currentGasTarget / BigInt(BASE_FEE_MAX_CHANGE_DENOMINATOR)
+      const baseFeePerGasDelta = (currentBaseFeePerGas * gasUsedDelta) / currentGasTarget / BASE_FEE_MAX_CHANGE_DENOMINATOR
 
       return currentBaseFeePerGas + baseFeePerGasDelta
     } else {
       const gasUsedDelta = currentGasTarget - currentGasUsed
-      const baseFeePerGasDelta = (currentBaseFeePerGas * gasUsedDelta) / currentGasTarget / BigInt(BASE_FEE_MAX_CHANGE_DENOMINATOR)
+      const baseFeePerGasDelta = (currentBaseFeePerGas * gasUsedDelta) / currentGasTarget / BASE_FEE_MAX_CHANGE_DENOMINATOR
 
       return currentBaseFeePerGas - baseFeePerGasDelta
     }
@@ -1085,17 +1082,19 @@ export class FlashbotsBundleProvider extends JsonRpcProvider {
 
   /** Gets information about a block from Flashbots blocks API. */
   public async fetchBlocksApi(blockNumber: number): Promise<BlocksApiResponse> {
-    const request = new FetchRequest(`https://blocks.flashbots.net/v1/blocks?block_number=${blockNumber}`)
+    const request = new FetchRequest(`${BLOCK_API}?block_number=${blockNumber}`)
     const resp = await request.send()
+    resp.assertOk()
     return resp.bodyJson
   }
 
   private async request(body: string) {
     // NOTE: Should we call this.send instead of this method and override _send to set the header?
-    const request = this.relayConnection.clone()
+    const request = this.#connect.clone()
     request.setHeader('X-Flashbots-Signature', `${await this.authSigner.getAddress()}:${await this.authSigner.signMessage(id(body))}`)
     request.body = body
     const resp = await request.send()
+    resp.assertOk()
     return resp.bodyJson
   }
 
@@ -1124,8 +1123,7 @@ export class FlashbotsBundleProvider extends JsonRpcProvider {
     return {
       method: method,
       params: params,
-      // id: this.#nextId++, // ??? This is now private in JsonRpcApiPRovider
-      id: this.nextId++,
+      id: this.#nextId++,
       jsonrpc: '2.0'
     }
   }
