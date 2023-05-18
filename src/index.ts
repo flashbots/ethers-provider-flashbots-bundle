@@ -529,8 +529,8 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
             ? transactionDetail.ethSentToCoinbase
             : BigNumber.from(0)
         const totalMinerReward =
-          'total_miner_reward' in transactionDetail 
-            ? BigNumber.from(transactionDetail.total_miner_reward) 
+          'total_miner_reward' in transactionDetail
+            ? BigNumber.from(transactionDetail.total_miner_reward)
             : 'coinbaseDiff' in transactionDetail
             ? BigNumber.from(transactionDetail.coinbaseDiff)
             : BigNumber.from(0)
