@@ -528,13 +528,13 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
             : 'ethSentToCoinbase' in transactionDetail
             ? transactionDetail.ethSentToCoinbase
             : BigNumber.from(0)
-        const total_miner_reward = 
+        const totalMinerReward =
           'total_miner_reward' in transactionDetail 
             ? BigNumber.from(transactionDetail.total_miner_reward) 
             : 'coinbaseDiff' in transactionDetail
             ? BigNumber.from(transactionDetail.coinbaseDiff)
             : BigNumber.from(0)
-        const priorityFeeReceivedByMiner = total_miner_reward.sub(ethSentToCoinbase) 
+        const priorityFeeReceivedByMiner = totalMinerReward.sub(ethSentToCoinbase)
         return {
           gasUsed: acc.gasUsed + gasUsed,
           gasFeesPaidBySearcher: acc.gasFeesPaidBySearcher.add(baseFee.mul(gasUsed).add(priorityFeeReceivedByMiner)),
