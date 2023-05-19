@@ -838,7 +838,8 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     signedBundledTransactions: Array<string>,
     blockTag: BlockTag,
     stateBlockTag?: BlockTag,
-    blockTimestamp?: number
+    blockTimestamp?: number,
+    coinbase?: string
   ): Promise<SimulationResponse> {
     let evmBlockNumber: string
     if (typeof blockTag === 'number') {
@@ -863,7 +864,8 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
         txs: signedBundledTransactions,
         blockNumber: evmBlockNumber,
         stateBlockNumber: evmBlockStateNumber,
-        timestamp: blockTimestamp
+        timestamp: blockTimestamp,
+        coinbase
       }
     ]
     const request = JSON.stringify(this.prepareRelayRequest('eth_callBundle', params))
