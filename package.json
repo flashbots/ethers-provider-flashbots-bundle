@@ -18,21 +18,21 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@types/node": "18.15.11",
-    "@types/uuid": "9.0.1",
-    "@typescript-eslint/eslint-plugin": "5.59.0",
-    "@typescript-eslint/parser": "5.59.0",
-    "eslint": "8.38.0",
-    "eslint-config-prettier": "8.8.0",
-    "eslint-plugin-prettier": "4.2.1",
-    "ethers": "6.2.3",
-    "prettier": "2.8.7",
+    "@types/node": "20.5.9",
+    "@types/uuid": "9.0.3",
+    "@typescript-eslint/eslint-plugin": "6.5.0",
+    "@typescript-eslint/parser": "6.5.0",
+    "eslint": "8.48.0",
+    "eslint-config-prettier": "9.0.0",
+    "eslint-plugin-prettier": "5.0.0",
+    "ethers": "6.7.1",
+    "prettier": "3.0.3",
     "ts-node": "10.9.1",
-    "typescript": "5.0.4",
+    "typescript": "5.2.2",
     "uuid": "9.0.0"
   },
   "peerDependencies": {
-    "ethers": "6.2.3"
+    "ethers": "6.7.1"
   },
   "dependencies": {
   }

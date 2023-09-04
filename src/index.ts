@@ -611,17 +611,20 @@ export class FlashbotsBundleProvider extends AbstractProvider {
    */
   private waitForBundleInclusion(transactionAccountNonces: Array<TransactionAccountNonce>, targetBlockNumber: number, timeout: number) {
     return new Promise<FlashbotsBundleResolution>((resolve, reject) => {
-      let timer: NodeJS.Timer | null = null
+      let timer: NodeJS.Timeout | null = null
       let done = false
 
-      const minimumNonceByAccount = transactionAccountNonces.reduce((acc, accountNonce) => {
-        if (accountNonce.nonce > 0) {
-          if (!acc[accountNonce.account] || accountNonce.nonce < acc[accountNonce.account]) {
-            acc[accountNonce.account] = accountNonce.nonce
+      const minimumNonceByAccount = transactionAccountNonces.reduce(
+        (acc, accountNonce) => {
+          if (accountNonce.nonce > 0) {
+            if (!acc[accountNonce.account] || accountNonce.nonce < acc[accountNonce.account]) {
+              acc[accountNonce.account] = accountNonce.nonce
+            }
           }
-        }
-        return acc
-      }, {} as { [account: string]: number })
+          return acc
+        },
+        {} as { [account: string]: number }
+      )
 
       const handler = async (blockNumber: number) => {
         if (blockNumber < targetBlockNumber) {
@@ -684,7 +687,7 @@ export class FlashbotsBundleProvider extends AbstractProvider {
    */
   private waitForTxInclusion(transactionHash: string, maxBlockNumber: number, timeout: number) {
     return new Promise<FlashbotsTransactionResolution>((resolve, reject) => {
-      let timer: NodeJS.Timer | null = null
+      let timer: NodeJS.Timeout | null = null
       let done = false
 
       // runs on new block event
