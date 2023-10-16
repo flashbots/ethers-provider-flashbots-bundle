@@ -1015,10 +1015,6 @@ export class FlashbotsBundleProvider extends AbstractProvider {
       const currentBundleSignedTxs = await Promise.all(
         currentBundleTransactions.map(async (competitorBundleBlocksApiTx) => {
           const tx = await this.genericProvider.getTransaction(competitorBundleBlocksApiTx.transaction_hash)
-          // NOTE: The `raw` property no longer exists on TransactionResponse
-          // if (tx.raw !== undefined) {
-          //   return tx.raw
-          // }
           if (tx !== null && tx.signature.v !== undefined && tx.signature.r !== undefined && tx.signature.s !== undefined) {
             const newTx = Transaction.from(tx)
             if (tx.type === 2) {
