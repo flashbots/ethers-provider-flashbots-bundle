@@ -593,7 +593,7 @@ export class FlashbotsBundleProvider extends AbstractProvider {
       const nonce =
         transaction.nonce !== undefined && transaction.nonce !== null
           ? transaction.nonce
-          : nonces[address] || (await this.genericProvider.getTransactionCount(address, 'latest'))
+          : nonces[address] ?? (await this.genericProvider.getTransactionCount(address, 'latest'))
       nonces[address] = nonce + 1
       if (transaction.nonce === undefined && transaction.nonce !== null) transaction.nonce = nonce
       if ((transaction.type == null || transaction.type == 0) && transaction.gasPrice === undefined) transaction.gasPrice = 0n
