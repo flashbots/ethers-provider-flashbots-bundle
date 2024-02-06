@@ -8,6 +8,10 @@ One key feature this library provides is **payload signing**, a requirement to s
 
 This library is not a fully functional ethers.js implementation, just a simple provider class, designed to interact with an existing [ethers.js v6 installation](https://github.com/ethers-io/ethers.js/).
 
+# ethers v5 & v6
+
+This version of `@flashbots/ethers-provider-bundle` (v1.x.x) is designed to work with [ethers v6](https://www.npmjs.com/package/ethers). If you want ethers-v5 compatibility, stick with the `v0.x.x` versions.
+
 ## Example
 
 Install ethers.js and the Flashbots ethers bundle provider.
