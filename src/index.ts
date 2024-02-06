@@ -67,6 +67,13 @@ export interface FlashbotsPrivateTransactionResponse {
   receipts: () => Promise<Array<TransactionReceipt>>
 }
 
+export interface BundleBroadcastResponse {
+  bundleTransactions: Array<TransactionAccountNonce>
+  wait: () => Promise<FlashbotsBundleResolution>
+  receipts: () => Promise<Array<TransactionReceipt>>
+  bundleHashes: Array<string>  
+}
+
 export interface TransactionSimulationBase {
   txHash: string
   gasUsed: number
@@ -112,6 +119,8 @@ export interface SimulationResponseSuccess {
 export type SimulationResponse = SimulationResponseSuccess | RelayResponseError
 
 export type FlashbotsTransaction = FlashbotsTransactionResponse | RelayResponseError
+
+export type BundleBroadcast = BundleBroadcastResponse | RelayResponseError
 
 export type FlashbotsPrivateTransaction = FlashbotsPrivateTransactionResponse | RelayResponseError
 
@@ -233,7 +242,7 @@ const TIMEOUT_MS = 5 * 60 * 1000
 
 export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
   private genericProvider: BaseProvider
-  private authSigner: Signer
+  protected authSigner: Signer
   private connectionInfo: ConnectionInfo
 
   constructor(genericProvider: BaseProvider, authSigner: Signer, connectionInfoOrUrl: ConnectionInfo, network: Networkish) {
@@ -602,7 +611,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
    * @param targetBlockNumber block number to check for bundle inclusion
    * @param timeout ms
    */
-  private waitForBundleInclusion(transactionAccountNonces: Array<TransactionAccountNonce>, targetBlockNumber: number, timeout: number) {
+  protected waitForBundleInclusion(transactionAccountNonces: Array<TransactionAccountNonce>, targetBlockNumber: number, timeout: number) {
     return new Promise<FlashbotsBundleResolution>((resolve, reject) => {
       let timer: NodeJS.Timer | null = null
       let done = false
@@ -1086,11 +1095,11 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     return fetchJson(connectionInfo, request)
   }
 
-  private async fetchReceipts(bundledTransactions: Array<TransactionAccountNonce>): Promise<Array<TransactionReceipt>> {
+  protected async fetchReceipts(bundledTransactions: Array<TransactionAccountNonce>): Promise<Array<TransactionReceipt>> {
     return Promise.all(bundledTransactions.map((bundledTransaction) => this.genericProvider.getTransactionReceipt(bundledTransaction.hash)))
   }
 
-  private prepareRelayRequest(
+  protected prepareRelayRequest(
     method:
       | 'eth_callBundle'
       | 'eth_cancelBundle'
@@ -1111,3 +1120,118 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     }
   }
 }
+
+export class BuilderBroadcaster extends FlashbotsBundleProvider {
+  private connectionInfoArr: Array<ConnectionInfo>;
+
+  constructor(genericProvider: BaseProvider, authSigner: Signer , network: Networkish, connectionInfoOrUrls: Array<ConnectionInfo>) {
+    const defaultConnectionInfo: ConnectionInfo = { url: DEFAULT_FLASHBOTS_RELAY }
+    super(genericProvider, authSigner, defaultConnectionInfo, network)
+    this.connectionInfoArr = connectionInfoOrUrls
+  }
+
+  /**
+   * Creates a new Builder Bundle Broadcaster.
+   * @param genericProvider ethers.js mainnet provider
+   * @param authSigner account to sign bundles
+   * @param connectionInfoOrUrl (optional) connection settings
+   * @param network (optional) network settings
+   *
+   * @example
+   * ```typescript
+   * const {providers, Wallet} = require("ethers")
+   * const {BuilderBroadcaster} = require("@flashbots/ethers-provider-bundle")
+   * const authSigner = Wallet.createRandom()
+   * const provider = new providers.JsonRpcProvider("http://localhost:8545")
+   * const broadcaster = await BuilderBroadcaster.create(provider, authSigner, ['https://relay.flashbots.net/'])
+   * ```
+   */
+   static async createBroadcaster(
+    genericProvider: BaseProvider,
+    authSigner: Signer,
+    builderEndpoints: Array<string>,
+    network?: Networkish
+  ): Promise<BuilderBroadcaster> {
+    const connectionInfoOrUrlArray: ConnectionInfo[] = Array.isArray(builderEndpoints)
+    ? builderEndpoints.map((b_e) => ({ url: b_e }))
+    : [];
+  
+    const networkish: Networkish = {
+      chainId: 0,
+      name: ''
+    }
+    if (typeof network === 'string') {
+      networkish.name = network
+    } else if (typeof network === 'number') {
+      networkish.chainId = network
+    } else if (typeof network === 'object') {
+      networkish.name = network.name
+      networkish.chainId = network.chainId
+    }
+
+    if (networkish.chainId === 0) {
+      networkish.chainId = (await genericProvider.getNetwork()).chainId
+    }
+
+    return new BuilderBroadcaster(genericProvider, authSigner, networkish, connectionInfoOrUrlArray)
+  }
+
+  public async broadcastBundle(
+    signedBundledTransactions: Array<string>,
+    targetBlockNumber: number,
+    opts?: FlashbotsOptions
+  ): Promise<BundleBroadcast> {
+    const params = {
+      txs: signedBundledTransactions,
+      blockNumber: `0x${targetBlockNumber.toString(16)}`,
+      minTimestamp: opts?.minTimestamp,
+      maxTimestamp: opts?.maxTimestamp,
+      revertingTxHashes: opts?.revertingTxHashes,
+      replacementUuid: opts?.replacementUuid
+    }
+
+    const request = JSON.stringify(super.prepareRelayRequest('eth_sendBundle', [params]))
+    const responses = await this.requestBroadcast(request)
+
+    const bundleTransactions = signedBundledTransactions.map((signedTransaction) => {
+      const transactionDetails = ethers.utils.parseTransaction(signedTransaction)
+      return {
+        signedTransaction,
+        hash: ethers.utils.keccak256(signedTransaction),
+        account: transactionDetails.from || '0x0',
+        nonce: transactionDetails.nonce
+      }
+    })
+
+    const bundleHashes = responses
+    .filter((response) => response.error === undefined || response.error === null)
+    .map((response) => response.result?.bundleHash)
+    .filter(Boolean);
+  
+    return {
+      bundleTransactions,
+      wait: () => super.waitForBundleInclusion(bundleTransactions, targetBlockNumber, TIMEOUT_MS),
+      receipts: () => super.fetchReceipts(bundleTransactions),
+      bundleHashes: bundleHashes
+    }    
+    
+  }  
+
+  private async requestBroadcast(request: string) {
+    const responseHandles = new Array(); [];
+    for (let connectionInfo of this.connectionInfoArr) {
+      const updatedConnectionInfo = { ...connectionInfo };
+      updatedConnectionInfo.headers = {
+        'X-Flashbots-Signature': `${await this.authSigner.getAddress()}:${await this.authSigner.signMessage(id(request))}`,
+        ...connectionInfo.headers
+      };
+      const promise = new Promise((resolve) => resolve(fetchJson(updatedConnectionInfo, request)));
+      responseHandles.push(promise);
+    }
+
+    let responses = await Promise.all(responseHandles)
+    return responses
+  }  
+
+
+} 
