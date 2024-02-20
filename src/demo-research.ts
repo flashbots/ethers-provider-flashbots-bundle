@@ -1,14 +1,15 @@
-import { providers, utils, Wallet } from 'ethers'
+import { JsonRpcProvider, Wallet, formatUnits } from 'ethers'
 import { FlashbotsBundleConflictType, FlashbotsBundleProvider, FlashbotsGasPricing } from './index'
 
 const FLASHBOTS_AUTH_KEY = process.env.FLASHBOTS_AUTH_KEY
 
 // ===== Uncomment this for mainnet =======
 const CHAIN_ID = 1
-const provider = new providers.JsonRpcProvider(
-  { url: process.env.ETHEREUM_RPC_URL || 'http://127.0.0.1:8545' },
-  { chainId: CHAIN_ID, ensAddress: '', name: 'mainnet' }
-)
+const provider = new JsonRpcProvider(process.env.ETHEREUM_RPC_URL || 'http://127.0.0.1:8545', {
+  chainId: CHAIN_ID,
+  ensAddress: '',
+  name: 'mainnet'
+})
 const FLASHBOTS_EP = undefined
 // ===== Uncomment this for mainnet =======
 
@@ -20,10 +21,10 @@ const FLASHBOTS_EP = undefined
 
 function printGasPricing(gasPricing: FlashbotsGasPricing) {
   console.log(`Gas Used: ${gasPricing.gasUsed} in ${gasPricing.txCount} txs`)
-  console.log(`[searcher] Gas Fees: ${utils.formatUnits(gasPricing.gasFeesPaidBySearcher)} ETH`)
-  console.log(`[searcher] Effective Gas Price: ${utils.formatUnits(gasPricing.effectiveGasPriceToSearcher, 'gwei')} gwei`)
-  console.log(`[miner] Priority Fees: ${utils.formatUnits(gasPricing.priorityFeesReceivedByMiner)} ETH`)
-  console.log(`[miner] Effective Priority Fee Per Gas: ${utils.formatUnits(gasPricing.effectivePriorityFeeToMiner, 'gwei')} gwei`)
+  console.log(`[searcher] Gas Fees: ${formatUnits(gasPricing.gasFeesPaidBySearcher)} ETH`)
+  console.log(`[searcher] Effective Gas Price: ${formatUnits(gasPricing.effectiveGasPriceToSearcher, 'gwei')} gwei`)
+  console.log(`[miner] Priority Fees: ${formatUnits(gasPricing.priorityFeesReceivedByMiner)} ETH`)
+  console.log(`[miner] Effective Priority Fee Per Gas: ${formatUnits(gasPricing.effectivePriorityFeeToMiner, 'gwei')} gwei`)
 }
 
 async function main() {

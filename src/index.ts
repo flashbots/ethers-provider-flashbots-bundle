@@ -1,13 +1,21 @@
-import { BlockTag, TransactionReceipt, TransactionRequest } from '@ethersproject/abstract-provider'
-import { Networkish } from '@ethersproject/networks'
-import { BaseProvider } from '@ethersproject/providers'
-import { ConnectionInfo, fetchJson } from '@ethersproject/web'
-import { BigNumber, ethers, providers, Signer } from 'ethers'
-import { id, keccak256 } from 'ethers/lib/utils'
-import { serialize } from '@ethersproject/transactions'
+import {
+  AbstractProvider,
+  BlockTag,
+  TransactionReceipt,
+  TransactionRequest,
+  Provider,
+  Networkish,
+  Signer,
+  id,
+  keccak256,
+  Transaction,
+  Network,
+  FetchRequest
+} from 'ethers'
 
 export const DEFAULT_FLASHBOTS_RELAY = 'https://relay.flashbots.net'
-export const BASE_FEE_MAX_CHANGE_DENOMINATOR = 8
+export const BASE_FEE_MAX_CHANGE_DENOMINATOR = 8n
+export const BLOCK_API = 'https://blocks.flashbots.net/v1/blocks'
 
 export enum FlashbotsBundleResolution {
   BundleIncluded,
@@ -98,11 +106,11 @@ export interface RelayResponseError {
 }
 
 export interface SimulationResponseSuccess {
-  bundleGasPrice: BigNumber
+  bundleGasPrice: bigint
   bundleHash: string
-  coinbaseDiff: BigNumber
-  ethSentToCoinbase: BigNumber
-  gasFees: BigNumber
+  coinbaseDiff: bigint
+  ethSentToCoinbase: bigint
+  gasFees: bigint
   results: Array<TransactionSimulation>
   totalGasUsed: number
   stateBlockNumber: number
@@ -209,11 +217,11 @@ export interface FlashbotsBundleConflict {
 export interface FlashbotsGasPricing {
   txCount: number
   gasUsed: number
-  gasFeesPaidBySearcher: BigNumber
-  priorityFeesReceivedByMiner: BigNumber
-  ethSentToCoinbase: BigNumber
-  effectiveGasPriceToSearcher: BigNumber
-  effectivePriorityFeeToMiner: BigNumber
+  gasFeesPaidBySearcher: bigint
+  priorityFeesReceivedByMiner: bigint
+  ethSentToCoinbase: bigint
+  effectiveGasPriceToSearcher: bigint
+  effectivePriorityFeeToMiner: bigint
 }
 
 export interface FlashbotsBundleConflictWithGasPricing extends FlashbotsBundleConflict {
@@ -231,16 +239,21 @@ type RpcParams = Array<string[] | string | number | Record<string, unknown>>
 
 const TIMEOUT_MS = 5 * 60 * 1000
 
-export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
-  private genericProvider: BaseProvider
+export class FlashbotsBundleProvider extends AbstractProvider {
+  private genericProvider: Provider
   private authSigner: Signer
-  private connectionInfo: ConnectionInfo
 
-  constructor(genericProvider: BaseProvider, authSigner: Signer, connectionInfoOrUrl: ConnectionInfo, network: Networkish) {
-    super(connectionInfoOrUrl, network)
+  #connect: FetchRequest
+  #nextId: number
+
+  constructor(genericProvider: Provider, authSigner: Signer, url: string | FetchRequest, network: Networkish) {
+    super(network)
+
     this.genericProvider = genericProvider
     this.authSigner = authSigner
-    this.connectionInfo = connectionInfoOrUrl
+
+    this.#connect = typeof url === 'string' ? new FetchRequest(url) : url.clone()
+    this.#nextId = 1
   }
 
   static async throttleCallback(): Promise<boolean> {
@@ -265,39 +278,33 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
    * ```
    */
   static async create(
-    genericProvider: BaseProvider,
+    genericProvider: Provider,
     authSigner: Signer,
-    connectionInfoOrUrl?: ConnectionInfo | string,
+    url?: string | FetchRequest,
     network?: Networkish
   ): Promise<FlashbotsBundleProvider> {
-    const connectionInfo: ConnectionInfo =
-      typeof connectionInfoOrUrl === 'string' || typeof connectionInfoOrUrl === 'undefined'
-        ? {
-            url: connectionInfoOrUrl || DEFAULT_FLASHBOTS_RELAY
-          }
-        : {
-            ...connectionInfoOrUrl
-          }
-    if (connectionInfo.headers === undefined) connectionInfo.headers = {}
-    connectionInfo.throttleCallback = FlashbotsBundleProvider.throttleCallback
-    const networkish: Networkish = {
-      chainId: 0,
-      name: ''
-    }
+    const connect: FetchRequest =
+      typeof url === 'string' || url === undefined ? new FetchRequest(url ?? DEFAULT_FLASHBOTS_RELAY) : url.clone()
+    connect.retryFunc = FlashbotsBundleProvider.throttleCallback
+    const networkish = new Network('', 0n)
     if (typeof network === 'string') {
       networkish.name = network
     } else if (typeof network === 'number') {
       networkish.chainId = network
     } else if (typeof network === 'object') {
-      networkish.name = network.name
-      networkish.chainId = network.chainId
+      if (network.name !== undefined) {
+        networkish.name = network.name
+      }
+      if (network.chainId !== undefined) {
+        networkish.chainId = network.chainId
+      }
     }
 
-    if (networkish.chainId === 0) {
+    if (networkish.chainId === 0n) {
       networkish.chainId = (await genericProvider.getNetwork()).chainId
     }
 
-    return new FlashbotsBundleProvider(genericProvider, authSigner, connectionInfo, networkish)
+    return new FlashbotsBundleProvider(genericProvider, authSigner, connect, networkish)
   }
 
   /**
@@ -305,10 +312,10 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
    * @param baseFee current base fee
    * @param blocksInFuture number of blocks in the future
    */
-  static getMaxBaseFeeInFutureBlock(baseFee: BigNumber, blocksInFuture: number): BigNumber {
-    let maxBaseFee = BigNumber.from(baseFee)
+  static getMaxBaseFeeInFutureBlock(baseFee: bigint, blocksInFuture: number): bigint {
+    let maxBaseFee = BigInt(baseFee)
     for (let i = 0; i < blocksInFuture; i++) {
-      maxBaseFee = maxBaseFee.mul(1125).div(1000).add(1)
+      maxBaseFee = (maxBaseFee * 1125n) / 1000n + 1n
     }
     return maxBaseFee
   }
@@ -319,21 +326,21 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
    * @param currentGasUsed gas used by tx in simulation
    * @param currentGasLimit gas limit of transaction
    */
-  static getBaseFeeInNextBlock(currentBaseFeePerGas: BigNumber, currentGasUsed: BigNumber, currentGasLimit: BigNumber): BigNumber {
-    const currentGasTarget = currentGasLimit.div(2)
+  static getBaseFeeInNextBlock(currentBaseFeePerGas: bigint, currentGasUsed: bigint, currentGasLimit: bigint): bigint {
+    const currentGasTarget = currentGasLimit / 2n
 
-    if (currentGasUsed.eq(currentGasTarget)) {
+    if (currentGasUsed === currentGasTarget) {
       return currentBaseFeePerGas
-    } else if (currentGasUsed.gt(currentGasTarget)) {
-      const gasUsedDelta = currentGasUsed.sub(currentGasTarget)
-      const baseFeePerGasDelta = currentBaseFeePerGas.mul(gasUsedDelta).div(currentGasTarget).div(BASE_FEE_MAX_CHANGE_DENOMINATOR)
+    } else if (currentGasUsed > currentGasTarget) {
+      const gasUsedDelta = currentGasUsed - currentGasTarget
+      const baseFeePerGasDelta = (currentBaseFeePerGas * gasUsedDelta) / currentGasTarget / BASE_FEE_MAX_CHANGE_DENOMINATOR
 
-      return currentBaseFeePerGas.add(baseFeePerGasDelta)
+      return currentBaseFeePerGas + baseFeePerGasDelta
     } else {
-      const gasUsedDelta = currentGasTarget.sub(currentGasUsed)
-      const baseFeePerGasDelta = currentBaseFeePerGas.mul(gasUsedDelta).div(currentGasTarget).div(BASE_FEE_MAX_CHANGE_DENOMINATOR)
+      const gasUsedDelta = currentGasTarget - currentGasUsed
+      const baseFeePerGasDelta = (currentBaseFeePerGas * gasUsedDelta) / currentGasTarget / BASE_FEE_MAX_CHANGE_DENOMINATOR
 
-      return currentBaseFeePerGas.sub(baseFeePerGasDelta)
+      return currentBaseFeePerGas - baseFeePerGasDelta
     }
   }
 
@@ -391,10 +398,10 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     }
 
     const bundleTransactions = signedBundledTransactions.map((signedTransaction) => {
-      const transactionDetails = ethers.utils.parseTransaction(signedTransaction)
+      const transactionDetails = Transaction.from(signedTransaction)
       return {
         signedTransaction,
-        hash: ethers.utils.keccak256(signedTransaction),
+        hash: keccak256(signedTransaction),
         account: transactionDetails.from || '0x0',
         nonce: transactionDetails.nonce
       }
@@ -502,10 +509,10 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       }
     }
 
-    const transactionDetails = ethers.utils.parseTransaction(signedTransaction)
+    const transactionDetails = Transaction.from(signedTransaction)
     const privateTransaction = {
       signedTransaction: signedTransaction,
-      hash: ethers.utils.keccak256(signedTransaction),
+      hash: keccak256(signedTransaction),
       account: transactionDetails.from || '0x0',
       nonce: transactionDetails.nonce
     }
@@ -568,14 +575,15 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
    * ```
    */
   public async signBundle(bundledTransactions: Array<FlashbotsBundleTransaction | FlashbotsBundleRawTransaction>): Promise<Array<string>> {
-    const nonces: { [address: string]: BigNumber } = {}
+    const nonces: { [address: string]: number } = {}
     const signedTransactions = new Array<string>()
     for (const tx of bundledTransactions) {
       if ('signedTransaction' in tx) {
         // in case someone is mixing pre-signed and signing transactions, decode to add to nonce object
-        const transactionDetails = ethers.utils.parseTransaction(tx.signedTransaction)
-        if (transactionDetails.from === undefined) throw new Error('Could not decode signed transaction')
-        nonces[transactionDetails.from] = BigNumber.from(transactionDetails.nonce + 1)
+        const transactionDetails = Transaction.from(tx.signedTransaction)
+        if (transactionDetails.from === undefined || transactionDetails.from === null)
+          throw new Error('Could not decode signed transaction')
+        nonces[transactionDetails.from] = transactionDetails.nonce + 1
         signedTransactions.push(tx.signedTransaction)
         continue
       }
@@ -583,13 +591,12 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
       const address = await tx.signer.getAddress()
       if (typeof transaction.nonce === 'string') throw new Error('Bad nonce')
       const nonce =
-        transaction.nonce !== undefined
-          ? BigNumber.from(transaction.nonce)
-          : nonces[address] || BigNumber.from(await this.genericProvider.getTransactionCount(address, 'latest'))
-      nonces[address] = nonce.add(1)
-      if (transaction.nonce === undefined) transaction.nonce = nonce
-      if ((transaction.type == null || transaction.type == 0) && transaction.gasPrice === undefined)
-        transaction.gasPrice = BigNumber.from(0)
+        transaction.nonce !== undefined && transaction.nonce !== null
+          ? transaction.nonce
+          : nonces[address] ?? (await this.genericProvider.getTransactionCount(address, 'latest'))
+      nonces[address] = nonce + 1
+      if (transaction.nonce === undefined && transaction.nonce !== null) transaction.nonce = nonce
+      if ((transaction.type == null || transaction.type == 0) && transaction.gasPrice === undefined) transaction.gasPrice = 0n
       if (transaction.gasLimit === undefined) transaction.gasLimit = await tx.signer.estimateGas(transaction) // TODO: Add target block number and timestamp when supported by geth
       signedTransactions.push(await tx.signer.signTransaction(transaction))
     }
@@ -604,17 +611,20 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
    */
   private waitForBundleInclusion(transactionAccountNonces: Array<TransactionAccountNonce>, targetBlockNumber: number, timeout: number) {
     return new Promise<FlashbotsBundleResolution>((resolve, reject) => {
-      let timer: NodeJS.Timer | null = null
+      let timer: NodeJS.Timeout | null = null
       let done = false
 
-      const minimumNonceByAccount = transactionAccountNonces.reduce((acc, accountNonce) => {
-        if (accountNonce.nonce > 0) {
-          if (!acc[accountNonce.account] || accountNonce.nonce < acc[accountNonce.account]) {
-            acc[accountNonce.account] = accountNonce.nonce
+      const minimumNonceByAccount = transactionAccountNonces.reduce(
+        (acc, accountNonce) => {
+          if (accountNonce.nonce > 0) {
+            if (!acc[accountNonce.account] || accountNonce.nonce < acc[accountNonce.account]) {
+              acc[accountNonce.account] = accountNonce.nonce
+            }
           }
-        }
-        return acc
-      }, {} as { [account: string]: number })
+          return acc
+        },
+        {} as { [account: string]: number }
+      )
 
       const handler = async (blockNumber: number) => {
         if (blockNumber < targetBlockNumber) {
@@ -630,6 +640,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
           resolve(FlashbotsBundleResolution.AccountNonceTooHigh)
         } else {
           const block = await this.genericProvider.getBlock(targetBlockNumber)
+          if (block === null) throw new Error(`Unable to get block: ${targetBlockNumber}`)
           // check bundle against block:
           const blockTransactionsHash: { [key: string]: boolean } = {}
           for (const bt of block.transactions) {
@@ -676,15 +687,15 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
    */
   private waitForTxInclusion(transactionHash: string, maxBlockNumber: number, timeout: number) {
     return new Promise<FlashbotsTransactionResolution>((resolve, reject) => {
-      let timer: NodeJS.Timer | null = null
+      let timer: NodeJS.Timeout | null = null
       let done = false
 
       // runs on new block event
       const handler = async (blockNumber: number) => {
         if (blockNumber <= maxBlockNumber) {
           // check tx status on mainnet
-          const sentTxStatus = await this.genericProvider.getTransaction(transactionHash)
-          if (sentTxStatus && sentTxStatus.confirmations >= 1) {
+          const sentTxStatus = await this.genericProvider.getTransactionReceipt(transactionHash)
+          if (sentTxStatus && (await sentTxStatus.confirmations()) >= 1) {
             resolve(FlashbotsTransactionResolution.TransactionIncluded)
           } else {
             return
@@ -732,6 +743,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
    */
   public async getUserStats(): Promise<GetUserStatsResponse> {
     const blockDetails = await this.genericProvider.getBlock('latest')
+    if (blockDetails === null) throw new Error('Unable to get latest block')
     const evmBlockNumber = `0x${blockDetails.number.toString(16)}`
     const params = [evmBlockNumber]
     const request = JSON.stringify(this.prepareRelayRequest('flashbots_getUserStats', params))
@@ -753,6 +765,7 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
    */
   public async getUserStatsV2(): Promise<GetUserStatsResponseV2> {
     const blockDetails = await this.genericProvider.getBlock('latest')
+    if (blockDetails === null) throw new Error('Unable to get latest block')
     const evmBlockNumber = `0x${blockDetails.number.toString(16)}`
     const params = [{ blockNumber: evmBlockNumber }]
     const request = JSON.stringify(this.prepareRelayRequest('flashbots_getUserStatsV2', params))
@@ -847,10 +860,11 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     } else {
       const blockTagDetails = await this.genericProvider.getBlock(blockTag)
       const blockDetails = blockTagDetails !== null ? blockTagDetails : await this.genericProvider.getBlock('latest')
+      if (blockDetails === null) throw new Error('Unable to get latest block')
       evmBlockNumber = `0x${blockDetails.number.toString(16)}`
     }
 
-    let evmBlockStateNumber: string
+    let evmBlockStateNumber: string | bigint
     if (typeof stateBlockTag === 'number') {
       evmBlockStateNumber = `0x${stateBlockTag.toString(16)}`
     } else if (!stateBlockTag) {
@@ -881,11 +895,11 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
 
     const callResult = response.result
     return {
-      bundleGasPrice: BigNumber.from(callResult.bundleGasPrice),
+      bundleGasPrice: BigInt(callResult.bundleGasPrice),
       bundleHash: callResult.bundleHash,
-      coinbaseDiff: BigNumber.from(callResult.coinbaseDiff),
-      ethSentToCoinbase: BigNumber.from(callResult.ethSentToCoinbase),
-      gasFees: BigNumber.from(callResult.gasFees),
+      coinbaseDiff: BigInt(callResult.coinbaseDiff),
+      ethSentToCoinbase: BigInt(callResult.ethSentToCoinbase),
+      gasFees: BigInt(callResult.gasFees),
       results: callResult.results,
       stateBlockNumber: callResult.stateBlockNumber,
       totalGasUsed: callResult.results.reduce((a: number, b: TransactionSimulation) => a + b.gasUsed, 0),
@@ -893,49 +907,46 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     }
   }
 
-  private calculateBundlePricing(
-    bundleTransactions: Array<BlocksApiResponseTransactionDetails | TransactionSimulation>,
-    baseFee: BigNumber
-  ) {
+  private calculateBundlePricing(bundleTransactions: Array<BlocksApiResponseTransactionDetails | TransactionSimulation>, baseFee: bigint) {
     const bundleGasPricing = bundleTransactions.reduce(
       (acc, transactionDetail) => {
         // see: https://blocks.flashbots.net/ and https://github.com/flashbots/ethers-provider-flashbots-bundle/issues/62
         const gasUsed = 'gas_used' in transactionDetail ? transactionDetail.gas_used : transactionDetail.gasUsed
         const ethSentToCoinbase =
           'coinbase_transfer' in transactionDetail
-            ? transactionDetail.coinbase_transfer
+            ? BigInt(transactionDetail.coinbase_transfer)
             : 'ethSentToCoinbase' in transactionDetail
-            ? transactionDetail.ethSentToCoinbase
-            : BigNumber.from(0)
+            ? BigInt(transactionDetail.ethSentToCoinbase)
+            : 0n
         const totalMinerReward =
           'total_miner_reward' in transactionDetail
-            ? BigNumber.from(transactionDetail.total_miner_reward)
+            ? BigInt(transactionDetail.total_miner_reward)
             : 'coinbaseDiff' in transactionDetail
-            ? BigNumber.from(transactionDetail.coinbaseDiff)
-            : BigNumber.from(0)
-        const priorityFeeReceivedByMiner = totalMinerReward.sub(ethSentToCoinbase)
+            ? BigInt(transactionDetail.coinbaseDiff)
+            : 0n
+        const priorityFeeReceivedByMiner = totalMinerReward - ethSentToCoinbase
         return {
           gasUsed: acc.gasUsed + gasUsed,
-          gasFeesPaidBySearcher: acc.gasFeesPaidBySearcher.add(baseFee.mul(gasUsed).add(priorityFeeReceivedByMiner)),
-          priorityFeesReceivedByMiner: acc.priorityFeesReceivedByMiner.add(priorityFeeReceivedByMiner),
-          ethSentToCoinbase: acc.ethSentToCoinbase.add(ethSentToCoinbase)
+          gasFeesPaidBySearcher: acc.gasFeesPaidBySearcher + (baseFee * BigInt(gasUsed) + priorityFeeReceivedByMiner),
+          priorityFeesReceivedByMiner: acc.priorityFeesReceivedByMiner + priorityFeeReceivedByMiner,
+          ethSentToCoinbase: acc.ethSentToCoinbase + ethSentToCoinbase
         }
       },
       {
         gasUsed: 0,
-        gasFeesPaidBySearcher: BigNumber.from(0),
-        priorityFeesReceivedByMiner: BigNumber.from(0),
-        ethSentToCoinbase: BigNumber.from(0)
+        gasFeesPaidBySearcher: 0n,
+        priorityFeesReceivedByMiner: 0n,
+        ethSentToCoinbase: 0n
       }
     )
     const effectiveGasPriceToSearcher =
       bundleGasPricing.gasUsed > 0
-        ? bundleGasPricing.ethSentToCoinbase.add(bundleGasPricing.gasFeesPaidBySearcher).div(bundleGasPricing.gasUsed)
-        : BigNumber.from(0)
+        ? (bundleGasPricing.ethSentToCoinbase + bundleGasPricing.gasFeesPaidBySearcher) / BigInt(bundleGasPricing.gasUsed)
+        : 0n
     const effectivePriorityFeeToMiner =
       bundleGasPricing.gasUsed > 0
-        ? bundleGasPricing.ethSentToCoinbase.add(bundleGasPricing.priorityFeesReceivedByMiner).div(bundleGasPricing.gasUsed)
-        : BigNumber.from(0)
+        ? (bundleGasPricing.ethSentToCoinbase + bundleGasPricing.priorityFeesReceivedByMiner) / BigInt(bundleGasPricing.gasUsed)
+        : 0n
     return {
       ...bundleGasPricing,
       txCount: bundleTransactions.length,
@@ -955,7 +966,9 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     targetSignedBundledTransactions: Array<string>,
     targetBlockNumber: number
   ): Promise<FlashbotsBundleConflictWithGasPricing> {
-    const baseFee = (await this.genericProvider.getBlock(targetBlockNumber)).baseFeePerGas || BigNumber.from(0)
+    const block = await this.genericProvider.getBlock(targetBlockNumber)
+    if (block === null) throw new Error(`Unable to get block: ${targetBlockNumber}`)
+    const baseFee = block.baseFeePerGas ?? 0n
     const conflictDetails = await this.getConflictingBundleWithoutGasPricing(targetSignedBundledTransactions, targetBlockNumber)
     return {
       ...conflictDetails,
@@ -996,24 +1009,18 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     }
     const bundleTransactions = blockDetails.transactions
     const bundleCount = bundleTransactions[bundleTransactions.length - 1].bundle_index + 1
-    const signedPriorBundleTransactions = []
+    const signedPriorBundleTransactions: string[] = []
     for (let currentBundleId = 0; currentBundleId < bundleCount; currentBundleId++) {
       const currentBundleTransactions = bundleTransactions.filter((bundleTransaction) => bundleTransaction.bundle_index === currentBundleId)
       const currentBundleSignedTxs = await Promise.all(
         currentBundleTransactions.map(async (competitorBundleBlocksApiTx) => {
           const tx = await this.genericProvider.getTransaction(competitorBundleBlocksApiTx.transaction_hash)
-          if (tx.raw !== undefined) {
-            return tx.raw
-          }
-          if (tx.v !== undefined && tx.r !== undefined && tx.s !== undefined) {
+          if (tx !== null && tx.signature.v !== undefined && tx.signature.r !== undefined && tx.signature.s !== undefined) {
+            const newTx = Transaction.from(tx)
             if (tx.type === 2) {
-              delete tx.gasPrice
+              newTx.gasPrice = null
             }
-            return serialize(tx, {
-              v: tx.v,
-              r: tx.r,
-              s: tx.s
-            })
+            return newTx.serialized
           }
           throw new Error('Could not get raw tx')
         })
@@ -1074,20 +1081,37 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
 
   /** Gets information about a block from Flashbots blocks API. */
   public async fetchBlocksApi(blockNumber: number): Promise<BlocksApiResponse> {
-    return fetchJson(`https://blocks.flashbots.net/v1/blocks?block_number=${blockNumber}`)
+    const request = new FetchRequest(`${BLOCK_API}?block_number=${blockNumber}`)
+    const resp = await request.send()
+    try {
+      resp.assertOk()
+    } catch (err) {
+      throw new Error(`Request failed with status ${resp.statusCode} (URL: ${request.url}): ${resp.bodyText}`)
+    }
+    return resp.bodyJson
   }
 
-  private async request(request: string) {
-    const connectionInfo = { ...this.connectionInfo }
-    connectionInfo.headers = {
-      'X-Flashbots-Signature': `${await this.authSigner.getAddress()}:${await this.authSigner.signMessage(id(request))}`,
-      ...this.connectionInfo.headers
+  private async request(body: string) {
+    const request = this.#connect.clone()
+    request.setHeader('Content-Type', 'application/json')
+    request.setHeader('X-Flashbots-Signature', `${await this.authSigner.getAddress()}:${await this.authSigner.signMessage(id(body))}`)
+    request.body = body
+    const resp = await request.send()
+    try {
+      resp.assertOk()
+    } catch (err) {
+      throw new Error(`Request failed with status ${resp.statusCode} (URL: ${request.url}): ${resp.bodyText}`)
     }
-    return fetchJson(connectionInfo, request)
+    return resp.bodyJson
   }
 
   private async fetchReceipts(bundledTransactions: Array<TransactionAccountNonce>): Promise<Array<TransactionReceipt>> {
-    return Promise.all(bundledTransactions.map((bundledTransaction) => this.genericProvider.getTransactionReceipt(bundledTransaction.hash)))
+    const receipts = await Promise.all(
+      bundledTransactions.map((bundledTransaction) => this.genericProvider.getTransactionReceipt(bundledTransaction.hash))
+    )
+    return receipts.filter((receipt): receipt is TransactionReceipt => {
+      return receipt !== null
+    })
   }
 
   private prepareRelayRequest(
@@ -1104,9 +1128,9 @@ export class FlashbotsBundleProvider extends providers.JsonRpcProvider {
     params: RpcParams
   ) {
     return {
-      method: method,
-      params: params,
-      id: this._nextId++,
+      method,
+      params,
+      id: this.#nextId++,
       jsonrpc: '2.0'
     }
   }

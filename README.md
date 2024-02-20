@@ -6,7 +6,7 @@ Flashbots-enabled relays and miners expose two new jsonrpc endpoints: `eth_sendB
 
 One key feature this library provides is **payload signing**, a requirement to submit Flashbot bundles to the `mev-relay` service. This library takes care of the signing process via the `authSigner` passed into the constructor. [Read more about relay signatures here](https://github.com/flashbots/mev-relay-js#authentication)
 
-This library is not a fully functional ethers.js implementation, just a simple provider class, designed to interact with an existing [ethers.js v5 installation](https://github.com/ethers-io/ethers.js/).
+This library is not a fully functional ethers.js implementation, just a simple provider class, designed to interact with an existing [ethers.js v6 installation](https://github.com/ethers-io/ethers.js/).
 
 ## Example
 
@@ -20,11 +20,11 @@ npm install --save @flashbots/ethers-provider-bundle
 Open up a new TypeScript file (this also works with JavaScript if you prefer)
 
 ```ts
-import { providers, Wallet } from "ethers";
+import { JsonRpcProvider, Wallet } from "ethers";
 import { FlashbotsBundleProvider } from "@flashbots/ethers-provider-bundle";
 
 // Standard json rpc provider directly from ethers.js (NOT Flashbots)
-const provider = new providers.JsonRpcProvider({ url: ETHEREUM_RPC_URL }, 1)
+const provider = new JsonRpcProvider(ETHEREUM_RPC_URL, 1)
 
 // `authSigner` is an Ethereum private key that does NOT store funds and is NOT your bot's primary key.
 // This is an identifying key for signing payloads to establish reputation and whitelisting
@@ -206,8 +206,8 @@ const tx = {
     from: wallet.address,
     to: wallet.address,
     value: "0x42",
-    gasPrice: BigNumber.from(99).mul(1e9), // 99 gwei
-    gasLimit: BigNumber.from(21000),
+    gasPrice: 99n * BigInt(1e9), // 99 gwei
+    gasLimit: 21000n,
 }
 const privateTx = {
     transaction: tx,
@@ -226,7 +226,7 @@ const maxBlockNumber = (await provider.getBlockNumber()) + 10;
 const minTimestamp = 1645753192;
 
 const res = await flashbotsProvider.sendPrivateTransaction(
-  privateTx, 
+  privateTx,
   {maxBlockNumber, minTimestamp}
 )
 ```
@@ -238,8 +238,8 @@ To test Flashbots before going to mainnet, you can use the Goerli Flashbots rela
 1. Ensure your genericProvider passed in to the FlashbotsBundleProvider constructor is connected to Goerli (gas estimates and nonce requests need to correspond to the correct chain):
 
 ```ts
-import { providers } from 'ethers'
-const provider = providers.getDefaultProvider('goerli')
+import { getDefaultProvider } from 'ethers'
+const provider = getDefaultProvider('goerli')
 ```
 
 2. Set the relay endpoint to `https://relay-goerli.flashbots.net/`
