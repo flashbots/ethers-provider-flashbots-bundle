@@ -418,7 +418,7 @@ export class FlashbotsBundleProvider extends AbstractProvider {
           opts?.minTimestamp
         ),
       receipts: () => this.fetchReceipts(bundleTransactions),
-      bundleHash: response.result.bundleHash
+      bundleHash: response?.result?.bundleHash
     }
   }
 
